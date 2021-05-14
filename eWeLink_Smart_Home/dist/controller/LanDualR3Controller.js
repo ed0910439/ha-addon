@@ -89,9 +89,10 @@ LanDualR3Controller.prototype.setSwitch = function (switches) {
                     if (res && res.data && res.data.error === 0) {
                         this.updateState(switches);
                         this.params = mergeDeviceParams_1.default(this.params, { switches: switches });
+                        return [2 /*return*/, 0];
                     }
                     _a.label = 2;
-                case 2: return [2 /*return*/];
+                case 2: return [2 /*return*/, -1];
             }
         });
     });
