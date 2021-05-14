@@ -41,6 +41,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var axios_1 = __importDefault(require("axios"));
 var restApi_1 = require("../apis/restApi");
+var dataUtil_1 = require("../utils/dataUtil");
 var DiyController = /** @class */ (function () {
     function DiyController(_a) {
         var deviceId = _a.deviceId, ip = _a.ip, _b = _a.port, port = _b === void 0 ? 8081 : _b, disabled = _a.disabled, txt = _a.txt;
@@ -53,6 +54,7 @@ var DiyController = /** @class */ (function () {
         // this.entityId = `switch.${deviceId}`;
         this.disabled = disabled;
         this.txt = txt;
+        this.deviceName = dataUtil_1.getDataSync('diy.json', [deviceId, 'deviceName']) || "DIY-" + deviceId;
     }
     return DiyController;
 }());
