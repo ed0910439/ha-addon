@@ -105,16 +105,16 @@ LanPowerDetectionSwitchController.prototype.setSwitch = function (status) {
 /**
  * @description 更新状态到HA
  */
-LanPowerDetectionSwitchController.prototype.updateState = function (_a) {
-    var power = _a.power, current = _a.current, voltage = _a.voltage, status = _a.status;
+LanPowerDetectionSwitchController.prototype.updateState = function (params) {
     return __awaiter(this, void 0, void 0, function () {
-        var state, attributes, res;
-        return __generator(this, function (_b) {
-            switch (_b.label) {
+        var power, current, voltage, status, state, attributes, res;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
                 case 0:
-                    if (this.disabled) {
+                    if (this.disabled || lodash_1.default.isEmpty(params)) {
                         return [2 /*return*/];
                     }
+                    power = params.power, current = params.current, voltage = params.voltage, status = params.status;
                     state = status;
                     if (!this.online) {
                         state = 'unavailable';
@@ -133,7 +133,7 @@ LanPowerDetectionSwitchController.prototype.updateState = function (_a) {
                             attributes: attributes,
                         })];
                 case 1:
-                    res = _b.sent();
+                    res = _a.sent();
                     return [2 /*return*/];
             }
         });
