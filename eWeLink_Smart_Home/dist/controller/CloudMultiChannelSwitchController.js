@@ -52,6 +52,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+var lodash_1 = __importDefault(require("lodash"));
 var CloudDeviceController_1 = __importDefault(require("./CloudDeviceController"));
 var restApi_1 = require("../apis/restApi");
 var coolkit_ws_1 = __importDefault(require("coolkit-ws"));
@@ -59,14 +60,14 @@ var channelMap_1 = require("../config/channelMap");
 var mergeDeviceParams_1 = __importDefault(require("../utils/mergeDeviceParams"));
 var CloudMultiChannelSwitchController = /** @class */ (function (_super) {
     __extends(CloudMultiChannelSwitchController, _super);
-    function CloudMultiChannelSwitchController(params) {
+    function CloudMultiChannelSwitchController(props) {
         var _a;
-        var _this = _super.call(this, params) || this;
-        _this.entityId = "switch." + params.deviceId;
-        _this.uiid = params.extra.uiid;
-        _this.channelName = (_a = params.tags) === null || _a === void 0 ? void 0 : _a.ck_channel_name;
-        _this.maxChannel = channelMap_1.getMaxChannelByUiid(params.extra.uiid);
-        _this.params = params.params;
+        var _this = _super.call(this, props) || this;
+        _this.entityId = "switch." + props.deviceId;
+        _this.uiid = props.extra.uiid;
+        _this.channelName = (_a = props.tags) === null || _a === void 0 ? void 0 : _a.ck_channel_name;
+        _this.maxChannel = channelMap_1.getMaxChannelByUiid(props.extra.uiid);
+        _this.params = props.params;
         return _this;
     }
     return CloudMultiChannelSwitchController;
@@ -105,8 +106,12 @@ CloudMultiChannelSwitchController.prototype.updateState = function (switches) {
                 return [2 /*return*/];
             }
             for (i = 0; i < this.maxChannel; i++) {
-                _a = switches[i], outlet = _a.outlet, status_1 = _a.switch;
-                name_1 = this.channelName ? this.channelName[outlet] : outlet + 1;
+                _a = switches[i] || {}, outlet = _a.outlet, status_1 = _a.switch;
+                if (!lodash_1.default.isNumber(outlet) || status_1 === undefined) {
+                    // todo
+                    return [2 /*return*/];
+                }
+                name_1 = lodash_1.default.get(this, ['channelName', outlet], outlet + 1);
                 state = status_1;
                 if (!this.online) {
                     state = 'unavailable';
