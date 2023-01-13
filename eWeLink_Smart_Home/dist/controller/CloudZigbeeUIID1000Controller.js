@@ -29,7 +29,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     function verb(n) { return function (v) { return step([n, v]); }; }
     function step(op) {
         if (f) throw new TypeError("Generator is already executing.");
-        while (_) try {
+        while (g && (g = 0, op[0] && (_ = 0)), _) try {
             if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
             if (y = 0, t) op = [op[0] & 2, t.value];
             switch (op[0]) {
@@ -62,7 +62,7 @@ var CloudZigbeeUIID1000Controller = (function (_super) {
         var _this = _super.call(this, props) || this;
         _this.type = 8;
         _this.uiid = props.extra.uiid;
-        _this.entityId = "sensor." + _this.deviceId;
+        _this.entityId = "sensor.".concat(_this.deviceId);
         _this.params = props.params;
         return _this;
     }
@@ -79,7 +79,7 @@ CloudZigbeeUIID1000Controller.prototype.updateState = function (_a) {
                     if (this.disabled) {
                         return [2];
                     }
-                    state = "" + key;
+                    state = "".concat(key);
                     if (!this.online) {
                         state = 'unavailable';
                     }
@@ -90,12 +90,12 @@ CloudZigbeeUIID1000Controller.prototype.updateState = function (_a) {
                         ['unavailable', 'unavailable'],
                     ]);
                     if (!(key !== undefined)) return [3, 2];
-                    return [4, restApi_1.updateStates("" + this.entityId, {
-                            entity_id: "" + this.entityId,
+                    return [4, (0, restApi_1.updateStates)("".concat(this.entityId), {
+                            entity_id: "".concat(this.entityId),
                             state: keyMap.get(state),
                             attributes: {
                                 restored: false,
-                                friendly_name: "" + this.deviceName,
+                                friendly_name: "".concat(this.deviceName),
                                 icon: 'mdi:remote',
                                 state: state,
                             },
@@ -103,12 +103,12 @@ CloudZigbeeUIID1000Controller.prototype.updateState = function (_a) {
                 case 1:
                     _b.sent();
                     setTimeout(function () {
-                        restApi_1.updateStates("" + _this.entityId, {
-                            entity_id: "" + _this.entityId,
+                        (0, restApi_1.updateStates)("".concat(_this.entityId), {
+                            entity_id: "".concat(_this.entityId),
                             state: 'None',
                             attributes: {
                                 restored: false,
-                                friendly_name: "" + _this.deviceName,
+                                friendly_name: "".concat(_this.deviceName),
                                 icon: 'mdi:remote',
                                 state: 'None',
                             },
@@ -117,12 +117,12 @@ CloudZigbeeUIID1000Controller.prototype.updateState = function (_a) {
                     _b.label = 2;
                 case 2:
                     if (battery !== undefined) {
-                        restApi_1.updateStates(this.entityId + "_battery", {
-                            entity_id: this.entityId + "_battery",
+                        (0, restApi_1.updateStates)("".concat(this.entityId, "_battery"), {
+                            entity_id: "".concat(this.entityId, "_battery"),
                             state: battery,
                             attributes: {
                                 restored: false,
-                                friendly_name: this.deviceName + "-Battery",
+                                friendly_name: "".concat(this.deviceName, "-Battery"),
                                 device_class: 'battery',
                                 unit_of_measurement: '%',
                                 state: battery,
