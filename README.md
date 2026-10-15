@@ -1,3 +1,21 @@
+# Home Assistant Apps
+
+## Notice Board
+
+This repository provides **Notice Board 2.4.0**, an internal announcement app with rich text, PDF attachments, read receipts, Home Assistant notifications, and ntfy fallback.
+
+Add this repository in Home Assistant:
+
+```text
+https://github.com/ed0910439/ha-addon
+```
+
+Then go to **Settings → Apps → App Store** and install **Notice Board**.
+
+> The legacy eWeLink app content below is archived and kept for compatibility/history.
+
+---
+
 ## ⚠️ Project Archived Notice
 
 This repository has been **archived** and is no longer maintained.

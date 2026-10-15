@@ -1,0 +1,49 @@
+name: Notice Board
+version: "2.4.0"
+slug: notice_board
+description: "Internal announcement board with rich text, PDF attachments, read receipts, and Home Assistant notifications."
+url: "https://github.com/ed0910439/Notice-Board"
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+init: false
+stage: experimental
+homeassistant_api: true
+backup: cold
+webui: "http://[HOST]:[PORT:8000]/"
+ports:
+  8000/tcp: 8088
+ports_description:
+  8000/tcp: "Notice Board web interface"
+options:
+  bootstrap_admin_username: admin
+  trust_cloudflare: false
+  display_timezone: Asia/Taipei
+  totp_issuer: Notice Board
+  max_devices_per_user: 3
+  device_trust_days: 180
+  max_pdf_upload_mb: 25
+  scheduler_interval_seconds: 30
+  ntfy_base_url: https://ntfy.sh
+  ntfy_topic_map: "{}"
+
+schema:
+  public_url: "url?"
+  bootstrap_admin_username: str
+  bootstrap_admin_password: "password?"
+  trust_cloudflare: bool
+  display_timezone: str
+  totp_issuer: str
+  max_devices_per_user: "int(1,10)"
+  device_trust_days: "int(1,3650)"
+  max_pdf_upload_mb: "int(1,200)"
+  scheduler_interval_seconds: "int(10,3600)"
+  hass_webhook_id: "str?"
+  ntfy_base_url: url
+  ntfy_default_topic: "str?"
+  ntfy_topic_map: str
+  ntfy_access_token: "password?"
+  ntfy_username: "str?"
+  ntfy_password: "password?"

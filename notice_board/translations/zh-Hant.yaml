@@ -1,0 +1,42 @@
+configuration:
+  public_url:
+    name: Notice Board 公開網址
+    description: 放在手機通知中的固定 HTTPS 公告網址。
+  bootstrap_admin_username:
+    name: 初始系統管理員帳號
+  bootstrap_admin_password:
+    name: 初始系統管理員暫時密碼
+    description: 僅在使用者資料庫為空時使用，請至少設定 12 碼。
+  trust_cloudflare:
+    name: 信任 Cloudflare 用戶端 IP
+    description: 僅在所有公開流量都經過 Cloudflare 時開啟。
+  display_timezone:
+    name: 顯示時區
+  totp_issuer:
+    name: TOTP 顯示名稱
+  max_devices_per_user:
+    name: 每位使用者可信裝置上限
+  device_trust_days:
+    name: 可信裝置有效天數
+  max_pdf_upload_mb:
+    name: PDF 單檔上限（MB）
+  scheduler_interval_seconds:
+    name: 排程掃描間隔（秒）
+  hass_webhook_id:
+    name: Home Assistant Webhook ID
+    description: 接收 Notice Board 事件的 Home Assistant 自動化 Webhook ID。
+  ntfy_base_url:
+    name: ntfy 基底網址
+  ntfy_default_topic:
+    name: ntfy 預設備援 Topic
+  ntfy_topic_map:
+    name: ntfy 使用者 Topic 對應
+    description: Notice Board username 對應 ntfy topic 的 JSON 物件。
+  ntfy_access_token:
+    name: ntfy Access Token
+  ntfy_username:
+    name: ntfy 使用者名稱
+  ntfy_password:
+    name: ntfy 密碼
+network:
+  8000/tcp: Notice Board 網頁介面

@@ -1,0 +1,42 @@
+configuration:
+  public_url:
+    name: Public Notice Board URL
+    description: Stable HTTPS URL used in phone notification deep links.
+  bootstrap_admin_username:
+    name: Bootstrap administrator username
+  bootstrap_admin_password:
+    name: Bootstrap administrator password
+    description: Temporary password used only while the user database is empty. Use at least 12 characters.
+  trust_cloudflare:
+    name: Trust Cloudflare client IP header
+    description: Enable only when all public traffic reaches Notice Board through Cloudflare.
+  display_timezone:
+    name: Display timezone
+  totp_issuer:
+    name: TOTP issuer
+  max_devices_per_user:
+    name: Maximum trusted devices per user
+  device_trust_days:
+    name: Trusted-device lifetime in days
+  max_pdf_upload_mb:
+    name: Maximum PDF upload size (MB)
+  scheduler_interval_seconds:
+    name: Scheduler interval (seconds)
+  hass_webhook_id:
+    name: Home Assistant webhook ID
+    description: Webhook ID of the Home Assistant automation that receives Notice Board events.
+  ntfy_base_url:
+    name: ntfy base URL
+  ntfy_default_topic:
+    name: ntfy default fallback topic
+  ntfy_topic_map:
+    name: ntfy recipient topic map
+    description: JSON object mapping Notice Board usernames to ntfy topics.
+  ntfy_access_token:
+    name: ntfy access token
+  ntfy_username:
+    name: ntfy username
+  ntfy_password:
+    name: ntfy password
+network:
+  8000/tcp: Notice Board web interface

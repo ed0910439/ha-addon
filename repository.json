@@ -1,5 +1,5 @@
 {
-    "name": "eWeLink add-ons",
-    "url": "https://github.com/CoolKit-Technologies/ha-addon",
-    "maintainer": "CoolKit-Technologies"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+  "name": "Home Assistant Apps",
+  "url": "https://github.com/ed0910439/ha-addon",
+  "maintainer": "ed0910439"
 }
