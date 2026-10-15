@@ -14,7 +14,7 @@
     {% if user %}
     <nav class="nav">
       <a href="/">公告</a>
-      {% if user.role == 'USER' %}<a href="/manage/announcements/new">新增公告</a>{% endif %}
+      {% if user.role in ['USER', 'SYSADMIN'] %}<a href="/manage/announcements/new">新增公告</a>{% endif %}
       {% if user.role == 'SYSADMIN' %}<a href="/manage/accounts">帳號管理</a>{% endif %}
       <a href="/me/account">我的帳號</a>
       <a href="/me/devices">裝置</a>
