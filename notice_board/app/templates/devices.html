@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}我的裝置{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Trusted Devices</div><h1>我的裝置</h1><p class="muted">每個帳號最多 {{ max_devices }} 台；解除後該裝置下次開啟公告會重新要求登入與 2FA。</p></div></div>
+<section class="card device-list">
+  {% for d in devices %}<div class="device-row"><div><strong>{{ d.name }}</strong>{% if d.id == current_device_id %}<span class="badge published">目前裝置</span>{% endif %}<div class="small muted">首次 {{ d.first_seen_at|fmt_dt }} · 最後 {{ d.last_seen_at|fmt_dt }}</div></div><form method="post" action="/me/devices/{{ d.id }}/revoke"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline" type="submit">解除</button></form></div>{% else %}<p>沒有已綁定裝置。</p>{% endfor %}
+</section>
+{% endblock %}

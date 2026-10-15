@@ -1,0 +1,108 @@
+#!/usr/bin/with-contenv bashio
+set -euo pipefail
+
+OPTIONS="/data/options.json"
+SECRETS="/data/.noticeboard-secrets"
+RUNTIME="/data/.noticeboard-runtime-env"
+
+mkdir -p /data/uploads
+
+if [[ ! -f "${SECRETS}" ]]; then
+    bashio::log.info "Generating persistent Notice Board internal secrets"
+    umask 077
+    APP_SECRET_GENERATED="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    GATEWAY_SECRET_GENERATED="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    {
+        printf 'APP_SECRET=%q\n' "${APP_SECRET_GENERATED}"
+        printf 'INTERNAL_GATEWAY_SECRET=%q\n' "${GATEWAY_SECRET_GENERATED}"
+    } > "${SECRETS}"
+fi
+
+# shellcheck disable=SC1090
+source "${SECRETS}"
+
+PUBLIC_URL="$(jq -r '.public_url // ""' "${OPTIONS}")"
+BOOTSTRAP_ADMIN_USERNAME="$(jq -r '.bootstrap_admin_username // "admin"' "${OPTIONS}")"
+BOOTSTRAP_ADMIN_PASSWORD="$(jq -r '.bootstrap_admin_password // ""' "${OPTIONS}")"
+TRUST_CLOUDFLARE="$(jq -r '.trust_cloudflare // false' "${OPTIONS}")"
+DISPLAY_TIMEZONE="$(jq -r '.display_timezone // "Asia/Taipei"' "${OPTIONS}")"
+TOTP_ISSUER="$(jq -r '.totp_issuer // "Notice Board"' "${OPTIONS}")"
+MAX_DEVICES="$(jq -r '.max_devices_per_user // 3' "${OPTIONS}")"
+DEVICE_DAYS="$(jq -r '.device_trust_days // 180' "${OPTIONS}")"
+MAX_PDF_MB="$(jq -r '.max_pdf_upload_mb // 25' "${OPTIONS}")"
+SCHEDULER_INTERVAL="$(jq -r '.scheduler_interval_seconds // 30' "${OPTIONS}")"
+
+HASS_WEBHOOK_ID="$(jq -r '.hass_webhook_id // ""' "${OPTIONS}")"
+NTFY_BASE_URL="$(jq -r '.ntfy_base_url // "https://ntfy.sh"' "${OPTIONS}")"
+NTFY_DEFAULT_TOPIC="$(jq -r '.ntfy_default_topic // ""' "${OPTIONS}")"
+NTFY_TOPIC_MAP="$(jq -r '.ntfy_topic_map // "{}"' "${OPTIONS}")"
+NTFY_ACCESS_TOKEN="$(jq -r '.ntfy_access_token // ""' "${OPTIONS}")"
+NTFY_USERNAME="$(jq -r '.ntfy_username // ""' "${OPTIONS}")"
+NTFY_PASSWORD="$(jq -r '.ntfy_password // ""' "${OPTIONS}")"
+
+if ! python3 -c 'import json,sys; value=json.loads(sys.argv[1]); assert isinstance(value, dict) and all(isinstance(k,str) and isinstance(v,str) for k,v in value.items())' "${NTFY_TOPIC_MAP}"; then
+    bashio::exit.nok "ntfy_topic_map must be a JSON object with string keys and values"
+fi
+
+COOKIE_SECURE=false
+if [[ "${PUBLIC_URL}" == https://* ]]; then
+    COOKIE_SECURE=true
+fi
+
+HASS_WEBHOOK_URL=""
+if [[ -n "${HASS_WEBHOOK_ID}" ]]; then
+    HASS_WEBHOOK_URL="http://supervisor/core/api/webhook/${HASS_WEBHOOK_ID}"
+fi
+
+NOTIFICATIONS_ENABLED=false
+if [[ -n "${HASS_WEBHOOK_URL}" || -n "${NTFY_DEFAULT_TOPIC}" || "${NTFY_TOPIC_MAP}" != "{}" ]]; then
+    NOTIFICATIONS_ENABLED=true
+fi
+
+umask 077
+{
+    printf 'export APP_SECRET=%q\n' "${APP_SECRET}"
+    printf 'export BOOTSTRAP_ADMIN_USERNAME=%q\n' "${BOOTSTRAP_ADMIN_USERNAME}"
+    printf 'export BOOTSTRAP_ADMIN_PASSWORD=%q\n' "${BOOTSTRAP_ADMIN_PASSWORD}"
+    printf 'export APP_BASE_URL=%q\n' "${PUBLIC_URL}"
+    printf 'export COOKIE_SECURE=%q\n' "${COOKIE_SECURE}"
+    printf 'export TRUST_CLOUDFLARE=%q\n' "${TRUST_CLOUDFLARE}"
+    printf 'export DISPLAY_TIMEZONE=%q\n' "${DISPLAY_TIMEZONE}"
+    printf 'export TOTP_ISSUER=%q\n' "${TOTP_ISSUER}"
+    printf 'export MAX_DEVICES_PER_USER=%q\n' "${MAX_DEVICES}"
+    printf 'export DEVICE_TRUST_DAYS=%q\n' "${DEVICE_DAYS}"
+    printf 'export DB_PATH=%q\n' "/data/notice.db"
+    printf 'export UPLOAD_DIR=%q\n' "/data/uploads"
+    printf 'export MAX_PDF_UPLOAD_MB=%q\n' "${MAX_PDF_MB}"
+    printf 'export SCHEDULER_INTERVAL_SECONDS=%q\n' "${SCHEDULER_INTERVAL}"
+
+    printf 'export NOTIFICATION_GATEWAY_ENABLED=%q\n' "${NOTIFICATIONS_ENABLED}"
+    printf 'export NOTIFICATION_GATEWAY_URL=%q\n' "http://127.0.0.1:8090/webhooks/noticeboard"
+    printf 'export NOTIFICATION_GATEWAY_TOKEN=%q\n' "${INTERNAL_GATEWAY_SECRET}"
+    printf 'export NOTIFICATION_GATEWAY_TIMEOUT_SECONDS=%q\n' "5"
+
+    printf 'export GATEWAY_SHARED_SECRET=%q\n' "${INTERNAL_GATEWAY_SECRET}"
+    printf 'export GATEWAY_HASS_WEBHOOK_URL=%q\n' "${HASS_WEBHOOK_URL}"
+    printf 'export GATEWAY_HASS_BEARER_TOKEN=%q\n' "${SUPERVISOR_TOKEN:-}"
+    printf 'export GATEWAY_HASS_TIMEOUT_SECONDS=%q\n' "5"
+    printf 'export GATEWAY_NTFY_BASE_URL=%q\n' "${NTFY_BASE_URL}"
+    printf 'export GATEWAY_NTFY_DEFAULT_TOPIC=%q\n' "${NTFY_DEFAULT_TOPIC}"
+    printf 'export GATEWAY_NTFY_TOPIC_MAP=%q\n' "${NTFY_TOPIC_MAP}"
+    printf 'export GATEWAY_NTFY_ACCESS_TOKEN=%q\n' "${NTFY_ACCESS_TOKEN}"
+    printf 'export GATEWAY_NTFY_USERNAME=%q\n' "${NTFY_USERNAME}"
+    printf 'export GATEWAY_NTFY_PASSWORD=%q\n' "${NTFY_PASSWORD}"
+    printf 'export GATEWAY_NTFY_TIMEOUT_SECONDS=%q\n' "5"
+    printf 'export GATEWAY_DEDUPE_TTL_SECONDS=%q\n' "86400"
+} > "${RUNTIME}"
+
+chmod 600 "${SECRETS}" "${RUNTIME}"
+
+if [[ -z "${BOOTSTRAP_ADMIN_PASSWORD}" && ! -f /data/notice.db ]]; then
+    bashio::log.warning "No bootstrap_admin_password is configured. Set one before the first login."
+fi
+
+if [[ -z "${PUBLIC_URL}" ]]; then
+    bashio::log.warning "public_url is empty. Local access works, but notification deep links will not be absolute URLs."
+fi
+
+bashio::log.info "Notice Board runtime configuration prepared"

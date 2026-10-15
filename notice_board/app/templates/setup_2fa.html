@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}設定第二階段驗證{% endblock %}
+{% block content %}
+<section class="auth-card card wide-auth">
+  <div class="step">2 / 2</div>
+  <h1>設定第二階段驗證</h1>
+  <p class="muted">用 Google Authenticator、Microsoft Authenticator、1Password 等 TOTP App 掃描。</p>
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  <div class="two-col">
+    <div class="qr-wrap"><img src="{{ qr }}" alt="2FA QR Code"></div>
+    <div>
+      <div class="small muted">無法掃描時手動輸入</div>
+      <code class="secret">{{ secret }}</code>
+      <form method="post" class="stack top-gap">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>6 位數驗證碼<input name="code" inputmode="numeric" pattern="[0-9 ]{6,8}" autocomplete="one-time-code" required autofocus></label>
+        <label>這台裝置名稱<input name="device_name" maxlength="80" value="{{ device_name }}" required></label>
+        <button class="btn primary" type="submit">驗證並綁定這台裝置</button>
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}
