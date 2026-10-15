@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <div><div class="eyebrow">Announcement Center</div><h1>公告</h1></div>
-  {% if user.role == 'USER' %}<a class="btn primary" href="/manage/announcements/new">＋ 新增公告</a>{% endif %}
+  {% if user.role in ['USER', 'SYSADMIN'] %}<a class="btn primary" href="/manage/announcements/new">＋ 新增公告</a>{% endif %}
 </div>
 {% if announcements %}
 <div class="announcement-grid">
