@@ -1,16 +1,24 @@
-# Notice Board — Home Assistant Local App
+# Notice Board
 
-這是 Notice Board 的私人 Home Assistant App 包裝。
+Notice Board is distributed through this Home Assistant App repository.
 
-特性：
+## Install
 
-- Notice Board 與 Notification Gateway 在同一個 App container 中以不同 process 執行。
-- SQLite、PDF 與內部 secrets 全部放在 Home Assistant 管理的 `/data`。
-- `backup: cold`，備份時由 Supervisor 先停止 App。
-- 直接使用 Supervisor Core API proxy 把公告事件送回 Home Assistant。
-- Notification Gateway 保留 ntfy fallback。
-- 不需要公開 GitHub repository。
-- 不需要公開 Docker / GHCR image。
-- Supervisor 會在 HASS 主機上本地 build。
+Add this repository in Home Assistant:
 
-安裝包由 private GitHub Actions 產生。完整步驟請看 **Documentation**。
+```text
+https://github.com/ed0910439/ha-addon
+```
+
+Then go to **Settings → Apps → App Store**, refresh the store, and install **Notice Board**.
+
+The App provides:
+
+- trusted-device login and TOTP 2FA;
+- announcement publishing, scheduling and expiry;
+- per-version read receipts and personalized diffs;
+- Tiptap rich-text editing;
+- authenticated PDF attachments;
+- Home Assistant notification delivery with ntfy fallback.
+
+Notice Board and Notification Gateway run as separate supervised processes inside the same App container. Persistent database, PDF uploads and generated internal secrets live in Home Assistant-managed `/data`.
