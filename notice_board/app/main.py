@@ -222,9 +222,9 @@ def require_sysadmin(user: dict) -> None:
         raise HTTPException(403, "只有系統管理員可執行此操作")
 
 
-def require_general_user(user: dict) -> None:
-    if user["role"] != "USER":
-        raise HTTPException(403, "此操作僅限一般使用者")
+def require_announcement_author(user: dict) -> None:
+    if user["role"] not in {"USER", "SYSADMIN"}:
+        raise HTTPException(403, "此操作僅限一般使用者或系統管理員")
 
 
 def auth_redirect_for(exc: HTTPException) -> RedirectResponse:
@@ -506,7 +506,7 @@ def slugify_title(title: str) -> str:
 
 
 def is_owner(user: dict, ann) -> bool:
-    return user["role"] == "USER" and user["id"] == ann["created_by"]
+    return user["role"] in {"USER", "SYSADMIN"} and user["id"] == ann["created_by"]
 
 
 def announcement_context(user: dict, ann) -> str:
@@ -854,7 +854,7 @@ def dashboard(request: Request):
     except HTTPException as exc:
         return auth_redirect_for(exc)
     with conn() as c:
-        if user["role"] == "USER":
+        if user["role"] in {"USER", "SYSADMIN"}:
             rows = c.execute(
                 """
                 SELECT a.*, u.display_name AS author_name,
@@ -1021,7 +1021,7 @@ async def pdf_upload(
 ):
     require_csrf(request, csrf_token)
     user = require_user(request)
-    require_general_user(user)
+    require_announcement_author(user)
     if not upload_session or len(upload_session) > 200:
         return JSONResponse({"error": "上傳工作階段無效"}, status_code=400)
     if announcement_id:
@@ -1085,7 +1085,7 @@ def attachment_file(request: Request, attachment_id: str, download: bool = False
         if not row:
             raise HTTPException(404)
         if row["announcement_id"]:
-            owner = user["role"] == "USER" and user["id"] == row["created_by"]
+            owner = user["role"] in {"USER", "SYSADMIN"} and user["id"] == row["created_by"]
             if not owner:
                 if row["announcement_status"] != "PUBLISHED":
                     raise HTTPException(404)
@@ -1106,7 +1106,7 @@ def attachment_file(request: Request, attachment_id: str, download: bool = False
 def announcement_new_page(request: Request):
     try:
         user = require_user(request, "/manage/announcements/new")
-        require_general_user(user)
+        require_announcement_author(user)
     except HTTPException as exc:
         if exc.status_code == 401:
             return auth_redirect_for(exc)
@@ -1129,7 +1129,7 @@ def announcement_new_action(
 ):
     require_csrf(request, csrf_token)
     user = require_user(request)
-    require_general_user(user)
+    require_announcement_author(user)
     title = title.strip()
     aid = str(uuid.uuid4())
     slug = slugify_title(title)
