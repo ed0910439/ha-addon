@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}公告系統{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">公告系統</a>
+    {% if user %}
+    <nav class="nav">
+      <a href="/">公告</a>
+      {% if user.role == 'USER' %}<a href="/manage/announcements/new">新增公告</a>{% endif %}
+      {% if user.role == 'SYSADMIN' %}<a href="/manage/accounts">帳號管理</a>{% endif %}
+      <a href="/me/account">我的帳號</a>
+      <a href="/me/devices">裝置</a>
+      <span class="user-chip">{{ user.display_name }} · {{ ACCOUNT_LEVEL_LABELS[user.role] }}</span>
+      <form method="post" action="/logout" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn ghost" type="submit">解除此裝置</button>
+      </form>
+    </nav>
+    {% endif %}
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

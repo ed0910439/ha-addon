@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}帳號管理{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Administration</div><h1>帳號管理</h1><p class="muted">帳號只有三種使用者級別：系統管理員、一般使用者、機器人。公告的編輯／發布權不再由帳號級別決定，而由公告建立者決定。</p></div></div>
+<section class="card">
+  <h2>建立帳號</h2>
+  <form method="post" action="/manage/accounts/create" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>帳號<input name="username" required></label>
+    <label>顯示名稱<input name="display_name" required></label>
+    <label>使用者級別<select name="role">{% for key,label in ACCOUNT_LEVEL_LABELS.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+    <label>一次性密碼<input type="password" name="temp_password" minlength="12" required></label>
+    <button class="btn primary" type="submit">建立</button>
+  </form>
+  <p class="small muted top-gap">機器人帳號不擁有公告內容；系統會以第一個「啟用中」的機器人帳號執行排程發布與到期檢查，並留下稽核紀錄。</p>
+</section>
+<div class="top-gap stack">
+  {% for u in users %}
+  <section class="card account-row">
+    <div class="account-main"><div class="avatar">{{ u.display_name[:1] }}</div><div><h3>{{ u.display_name }}</h3><div class="small muted">@{{ u.username }} · {{ ACCOUNT_LEVEL_LABELS[u.role] }} · {{ u.device_count }} 台裝置 · {{ '啟用' if u.is_active else '停用' }}</div></div></div>
+    <div class="account-actions">
+      {% if u.id != user.id %}
+      <form method="post" action="/manage/accounts/{{ u.id }}/role" class="row gap"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select name="role">{% for key,label in ACCOUNT_LEVEL_LABELS.items() %}<option value="{{ key }}" {% if u.role == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="btn" type="submit">更新級別</button></form>
+      <form method="post" action="/manage/accounts/{{ u.id }}/toggle-active"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">{{ '停用' if u.is_active else '啟用' }}</button></form>
+      {% else %}<span class="badge published">目前帳號</span>{% endif %}
+    </div>
+    <details class="admin-more"><summary>安全性操作</summary>
+      <div class="row gap wrap top-gap">
+        <form method="post" action="/manage/accounts/{{ u.id }}/reset-password" class="row gap"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="password" name="temp_password" minlength="12" placeholder="新一次性密碼" required><button class="btn danger-outline" type="submit">重設密碼並登出全部裝置</button></form>
+        <form method="post" action="/manage/accounts/{{ u.id }}/reset-2fa" data-confirm="確定重設此帳號的 2FA 並解除所有裝置？"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline" type="submit">重設 2FA</button></form>
+      </div>
+    </details>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

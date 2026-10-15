@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ '編輯公告' if announcement else '新增公告' }}{% endblock %}
+{% block content %}
+<div class="page-head row between wrap gap">
+  <div>
+    <h1>{{ '編輯公告' if announcement else '新增公告' }}</h1>
+    {% if announcement %}
+    <div class="row gap wrap">
+      <span class="badge {{ announcement.status|lower }}">{{ ANNOUNCEMENT_STATE_LABELS[announcement.status] }}</span>
+      {% if announcement.current_version %}<span class="badge version">v{{ announcement.current_version }}</span>{% endif %}
+      <span class="badge context">{{ '發布者' if announcement.current_version else '編輯者' }}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+{% if not active_bot %}<div class="alert warning">目前沒有啟用中的「機器人」帳號。你仍可手動發布，但排程發布與到期自動撤下不會執行。</div>{% endif %}
+<div class="editor-layout">
+  <section class="card">
+    <form method="post" class="stack" action="{{ '/manage/announcements/' + announcement.id + '/edit' if announcement and announcement.id else '/manage/announcements/new' }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="upload_session" value="{{ upload_session }}">
+      {% if announcement and announcement.id %}<input type="hidden" name="announcement_id" value="{{ announcement.id }}">{% endif %}
+      {% set edit_title = announcement.draft_title if announcement and announcement.has_unpublished_changes else (announcement.title if announcement else '') %}
+      {% set edit_body = announcement.draft_body if announcement and announcement.has_unpublished_changes else (announcement.body if announcement else '') %}
+      <label>標題<input name="title" maxlength="180" value="{{ edit_title }}" required></label>
+
+      <div class="tiptap-shell" data-tiptap-editor>
+        <span class="field-label">內容</span>
+        <div class="editor-toolbar" data-editor-toolbar aria-label="文字格式工具列">
+          <button type="button" class="tool-btn" data-command="bold"><strong>B</strong></button>
+          <button type="button" class="tool-btn" data-command="italic"><em>I</em></button>
+          <button type="button" class="tool-btn" data-command="strike"><s>S</s></button>
+          <button type="button" class="tool-btn" data-command="heading2">H2</button>
+          <button type="button" class="tool-btn" data-command="heading3">H3</button>
+          <button type="button" class="tool-btn" data-command="bulletList">• 清單</button>
+          <button type="button" class="tool-btn" data-command="orderedList">1. 清單</button>
+          <button type="button" class="tool-btn" data-command="blockquote">引用</button>
+          <button type="button" class="tool-btn" data-command="horizontalRule">分隔線</button>
+          <button type="button" class="tool-btn" data-command="undo">復原</button>
+          <button type="button" class="tool-btn" data-command="redo">重做</button>
+          <span class="toolbar-spacer"></span>
+          <button type="button" class="tool-btn pdf-tool" data-upload-pdf>加入 PDF</button>
+          <input data-pdf-input type="file" accept="application/pdf,.pdf" hidden>
+        </div>
+        <div class="editor-mount" data-editor-mount></div>
+        <textarea name="body" rows="18" maxlength="50000" class="richtext-fallback">{{ edit_body }}</textarea>
+        <textarea name="body_json" class="sr-only" tabindex="-1" aria-hidden="true"></textarea>
+        <div class="small muted upload-status" data-upload-status>PDF：10 頁以內上傳後可選擇直接顯示或附檔；11 頁起強制作為附檔。</div>
+      </div>
+      <script type="application/json" id="editor-initial-content">{{ editor_doc|tojson }}</script>
+
+      <div class="schedule-grid">
+        <label>排程發布時間（選填）<input type="datetime-local" name="scheduled_publish_at" value="{{ announcement.scheduled_publish_at|local_dt_input if announcement else '' }}"><span class="small muted">到時間後由機器人發布目前草稿／待發布更新。</span></label>
+        <label>公告到期時間（選填）<input type="datetime-local" name="expires_at" value="{{ announcement.expires_at|local_dt_input if announcement else '' }}"><span class="small muted">公告發布中到達此時間後，機器人會將它標記為已到期。</span></label>
+      </div>
+      <div class="row gap wrap">
+        <button class="btn primary" type="submit">{{ '儲存待發布更新' if announcement and announcement.current_version else ('儲存草稿' if announcement and announcement.id else '建立草稿') }}</button>
+        {% if announcement and announcement.status == 'PUBLISHED' %}<a class="btn" href="/a/{{ announcement.slug }}">查看正式版</a><button class="btn copy-btn" type="button" data-copy="{{ announcement.url }}">複製公告連結</button>{% endif %}
+      </div>
+    </form>
+    {% if announcement and announcement.current_version and announcement.has_unpublished_changes %}
+    <div class="alert info top-gap">目前正式對外仍是 <strong>v{{ announcement.current_version }}</strong>。上方內容是尚未發布的更新；發布後會成為 <strong>v{{ announcement.current_version + 1 }}</strong>，新版「已經看過」會重新計算。</div>
+    {% endif %}
+  </section>
+
+  {% if announcement and announcement.id %}
+  <aside class="stack">
+    <section class="card">
+      <h3>發布控制</h3>
+      {% if announcement.current_version == 0 %}
+      <form method="post" action="/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">立即發布 v1</button></form>
+      {% elif announcement.has_unpublished_changes %}
+      <form method="post" action="/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">發布更新 v{{ announcement.current_version + 1 }}</button></form>
+      {% elif announcement.status in ['WITHDRAWN','EXPIRED'] %}
+      <form method="post" action="/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">重新發布為 v{{ announcement.current_version + 1 }}</button></form>
+      {% else %}
+      <p class="muted small">目前 v{{ announcement.current_version }} 已是最新正式版本。</p>
+      {% endif %}
+
+      {% if can_withdraw %}<form method="post" action="/manage/announcements/{{ announcement.id }}/withdraw" data-confirm="確定要撤下這則公告？"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn full" type="submit">撤下公告</button></form>{% endif %}
+      {% if can_delete %}<form method="post" action="/manage/announcements/{{ announcement.id }}/delete" data-confirm="確定要刪除這則公告？資料會保留在稽核紀錄中。"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline full" type="submit">刪除公告</button></form>{% endif %}
+    </section>
+
+    <section class="card">
+      <h3>版本紀錄</h3>
+      {% for r in revisions %}
+      <div class="revision"><strong>v{{ r.version_no or '?' }} · {{ r.editor_name }}</strong><span>發布 {{ (r.published_at or r.created_at)|fmt_dt }}</span><span>{{ r.read_count }} 人看過此版</span></div>
+      {% else %}<p class="muted small">尚未發布任何版本。</p>{% endfor %}
+    </section>
+  </aside>
+  {% endif %}
+</div>
+
+<dialog id="pdf-display-dialog" class="pdf-dialog">
+  <form method="dialog" class="stack" onsubmit="return false">
+    <h3>PDF 要怎麼放進公告？</h3>
+    <p><strong data-pdf-dialog-name></strong><br><span class="muted" data-pdf-dialog-pages></span></p>
+    <p class="small muted">10 頁以內可直接顯示於公告，或只顯示為附檔連結。超過 10 頁時系統不會出現這個選擇。</p>
+    <div class="row gap wrap">
+      <button type="button" class="btn primary" data-pdf-mode="inline">直接顯示</button>
+      <button type="button" class="btn" data-pdf-mode="attachment">作為附檔</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/editor.js"></script>{% endblock %}

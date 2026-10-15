@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}我的帳號{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">My Account</div><h1>我的帳號</h1><p class="muted">{{ user.display_name }} · {{ ACCOUNT_LEVEL_LABELS[user.role] }}</p></div></div>
+{% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert success">{{ success }}</div>{% endif %}
+<section class="card account-settings">
+  <h2>修改密碼</h2>
+  <form method="post" action="/me/account/password" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>目前密碼<input type="password" name="current_password" autocomplete="current-password" required></label>
+    <label>新密碼<input type="password" name="new_password" minlength="12" autocomplete="new-password" required></label>
+    <label>再輸入一次<input type="password" name="confirm" minlength="12" autocomplete="new-password" required></label>
+    <button class="btn primary" type="submit">更新密碼</button>
+  </form>
+  <p class="small muted top-gap">修改自己的密碼不會解除目前已認證裝置；若要移除裝置，請到「裝置」頁處理。</p>
+</section>
+{% endblock %}

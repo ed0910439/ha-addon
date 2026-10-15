@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}公告列表{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">Announcement Center</div><h1>公告</h1></div>
+  {% if user.role == 'USER' %}<a class="btn primary" href="/manage/announcements/new">＋ 新增公告</a>{% endif %}
+</div>
+{% if announcements %}
+<div class="announcement-grid">
+  {% for a in announcements %}
+  <article class="card ann-card">
+    <div class="row gap wrap">
+      <span class="badge {{ a.status|lower }}">{{ ANNOUNCEMENT_STATE_LABELS[a.status] }}</span>
+      {% if a.current_version %}<span class="badge version">v{{ a.current_version }}</span>{% endif %}
+      <span class="badge context">{{ a.context_label }}</span>
+      {% if a.has_unpublished_changes %}<span class="badge pending">有待發布更新</span>{% endif %}
+      {% if a.status == 'PUBLISHED' and user.role != 'BOT' %}<span class="badge {{ 'read' if a.has_read_current else 'unread' }}">{{ '本版已讀' if a.has_read_current else '新版未讀' }}</span>{% endif %}
+      {% if a.published_at %}<span class="small muted">{{ a.published_at|fmt_dt }}</span>{% endif %}
+    </div>
+    <h2>{{ a.draft_title if a.created_by == user.id and a.has_unpublished_changes else a.title }}</h2>
+    <p class="preview">{{ (a.draft_body if a.created_by == user.id and a.has_unpublished_changes else a.body)|truncate(150) }}</p>
+    <div class="row between wrap gap">
+      <span class="small muted">{{ a.author_name }}{% if a.current_version %} · 本版 {{ a.read_count }} 人已看過{% endif %}</span>
+      <div class="row gap wrap">
+        {% if a.status == 'PUBLISHED' %}<a class="btn" href="/a/{{ a.slug }}">開啟</a><button class="btn copy-btn" type="button" data-copy="{{ a.url }}">複製連結</button>{% endif %}
+        {% if a.can_edit %}<a class="btn" href="/manage/announcements/{{ a.id }}/edit">管理我的公告</a>{% endif %}
+        {% if a.can_withdraw %}
+        <form method="post" action="/manage/announcements/{{ a.id }}/withdraw" data-confirm="確定要撤下這則公告？">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline" type="submit">撤下</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}<div class="empty card">目前沒有可顯示的公告。</div>{% endif %}
+{% endblock %}

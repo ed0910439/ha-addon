@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ announcement.title }}{% endblock %}
+{% block scripts %}<script type="module" src="/static/editor.js"></script>{% endblock %}
+{% block content %}
+<article class="card notice-view">
+  <div class="row between wrap gap">
+    <div class="row gap wrap">
+      <span class="badge {{ announcement.status|lower }}">{{ ANNOUNCEMENT_STATE_LABELS[announcement.status] if announcement.status in ANNOUNCEMENT_STATE_LABELS else announcement.status }}</span>
+      {% if announcement.current_version %}<span class="badge version">v{{ announcement.current_version }}</span>{% endif %}
+      <span class="badge context">{{ context_label }}</span>
+    </div>
+    <div class="row gap wrap">
+      {% if can_edit %}<a class="btn" href="/manage/announcements/{{ announcement.id }}/edit">管理我的公告</a>{% endif %}
+      {% if can_withdraw %}<form method="post" action="/manage/announcements/{{ announcement.id }}/withdraw" data-confirm="確定要撤下這則公告？"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline" type="submit">撤下公告</button></form>{% endif %}
+    </div>
+  </div>
+  <h1>{{ announcement.title }}</h1>
+  <div class="meta">發布：{{ announcement.published_at|fmt_dt }} · {{ announcement.author_name }}{% if announcement.current_version %} · 版本 v{{ announcement.current_version }}{% endif %}</div>
+
+  {% if comparison %}
+  <div class="revision-context">
+    <strong>自你上次看過的 v{{ comparison.from_version }} 更新至 v{{ comparison.to_version }}</strong>
+    {% if comparison.body_changed %}
+    <span>刪除線代表你上次看過、但目前版本已移除或取代的文字；新文字直接以正常文字顯示。中間未閱覽的版本不會列入比較。</span>
+    {% elif comparison.rich_changed %}
+    <span>文字內容相同，但富文字格式或附件呈現方式有更新；請查看下方目前完整內容。中間未閱覽的版本不會顯示。</span>
+    {% else %}
+    <span>目前內容與你上次看過的 v{{ comparison.from_version }} 相同；中間未閱覽的版本不會顯示。</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if comparison and comparison.body_changed %}
+  <section class="revision-diff-box">
+    <div class="small muted">相較你上次閱覽版本的文字變更</div>
+    <div class="notice-body revision-diff">{% for seg in comparison.body_segments %}{% if seg.kind == 'delete' %}<del>{{ seg.text }}</del>{% elif seg.kind == 'insert' %}{% if loop.previtem is defined and loop.previtem.kind == 'delete' %}<span class="diff-arrow" aria-hidden="true">→</span>{% endif %}<span class="diff-insert">{{ seg.text }}</span>{% else %}{{ seg.text }}{% endif %}{% endfor %}</div>
+  </section>
+  {% endif %}
+
+  <section class="current-content">
+    {% if comparison and comparison.body_changed %}<div class="small muted current-content-label">目前完整內容</div>{% endif %}
+    <div class="tiptap-viewer notice-body" data-tiptap-viewer data-content-script="announcement-current-content">{{ announcement.body }}</div>
+    <script type="application/json" id="announcement-current-content">{{ announcement.body_doc|tojson }}</script>
+  </section>
+
+  {% if announcement.status == 'PUBLISHED' %}
+  <section class="read-section">
+    <h3>已經看過 <span class="count">本版 {{ reads|length }} 人</span></h3>
+    <p class="small muted">每次發布新版本都會重新計算；舊版本的已閱紀錄仍保留在版本紀錄中。</p>
+    <div class="avatar-row">
+      {% for r in reads %}
+      <details class="receipt">
+        <summary class="avatar" title="{{ r.display_name }}">{% if r.avatar_url %}<img src="{{ r.avatar_url }}" alt="">{% else %}{{ r.display_name[:1] }}{% endif %}</summary>
+        <div class="bubble"><strong>{{ r.display_name }}</strong><span>@{{ r.username }}</span><span>查看本版：{{ r.first_seen_at|fmt_dt }}</span></div>
+      </details>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="comments" id="comments">
+    <h3>公開留言</h3>
+    <p class="small muted">留言採單層時間排序，不建立回覆串；要回覆前一則留言，直接在下方新增一則留言即可。</p>
+    {% if user.role != 'BOT' %}
+    <form method="post" action="/a/{{ announcement.slug }}/comments" class="comment-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <textarea name="body" maxlength="2000" rows="3" placeholder="留言會讓所有可閱覽這則公告的人看見" required></textarea>
+      <button class="btn primary" type="submit">送出留言</button>
+    </form>
+    {% endif %}
+    <div class="comment-list">
+      {% for c in comments %}
+      <div class="comment-item">
+        <div class="avatar small-avatar">{% if c.avatar_url %}<img src="{{ c.avatar_url }}" alt="">{% else %}{{ c.display_name[:1] }}{% endif %}</div>
+        <div class="comment-main"><div class="row gap wrap"><strong>{{ c.display_name }}</strong><span class="small muted">{{ c.created_at|fmt_dt }}{% if c.version_no %} · 於 v{{ c.version_no }} 留言{% endif %}</span></div><div class="comment-body">{{ c.body }}</div></div>
+        {% if c.user_id == user.id %}
+        <form method="post" action="/comments/{{ c.id }}/delete" class="comment-delete">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="link-danger" type="submit">刪除</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}<p class="muted">還沒有留言。</p>{% endfor %}
+    </div>
+  </section>
+  {% else %}
+  <div class="alert warning top-gap">這是建立者自己的非公開預覽，目前不會產生「已經看過」紀錄，也不能公開留言。</div>
+  {% endif %}
+</article>
+{% endblock %}
