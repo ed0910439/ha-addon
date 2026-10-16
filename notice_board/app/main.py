@@ -7,6 +7,7 @@ import json
 import os
 import re
 import secrets
+import socket
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -56,7 +57,7 @@ NOTIFICATION_GATEWAY_ENABLED = os.getenv("NOTIFICATION_GATEWAY_ENABLED", "false"
 NOTIFICATION_GATEWAY_URL = os.getenv("NOTIFICATION_GATEWAY_URL", "").strip()
 NOTIFICATION_GATEWAY_TOKEN = os.getenv("NOTIFICATION_GATEWAY_TOKEN", "").strip()
 NOTIFICATION_GATEWAY_TIMEOUT = max(1, int(os.getenv("NOTIFICATION_GATEWAY_TIMEOUT_SECONDS", "5")))
-INGRESS_PROXY_IP = os.getenv("INGRESS_PROXY_IP", "172.30.32.2").strip()
+INGRESS_PROXY_IP = os.getenv("INGRESS_PROXY_IP", "").strip()
 
 ACCOUNT_LEVEL_LABELS = {
     "SYSADMIN": "系統管理員",
@@ -121,11 +122,27 @@ templates.env.filters["fmt_dt"] = fmt_dt
 templates.env.filters["local_dt_input"] = local_dt_input
 
 
+def trusted_ingress_proxy_addresses() -> set[str]:
+    addresses: set[str] = set()
+    if INGRESS_PROXY_IP:
+        addresses.update(part.strip() for part in INGRESS_PROXY_IP.split(",") if part.strip())
+    try:
+        addresses.update(
+            item[4][0]
+            for item in socket.getaddrinfo("supervisor", None, type=socket.SOCK_STREAM)
+            if item and item[4]
+        )
+    except socket.gaierror:
+        pass
+    return addresses
+
+
 def is_ingress_request(request: Request) -> bool:
     client_host = request.client.host if request.client else ""
+    trusted_peers = trusted_ingress_proxy_addresses()
     return bool(
-        INGRESS_PROXY_IP
-        and client_host == INGRESS_PROXY_IP
+        client_host
+        and client_host in trusted_peers
         and request.headers.get("x-ingress-path")
         and request.headers.get("x-remote-user-id")
     )

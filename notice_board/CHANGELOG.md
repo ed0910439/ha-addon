@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.1
+
+- Fix Home Assistant Ingress opening to a 404 when the Supervisor proxy address is not the previously assumed fixed IP.
+- Resolve the trusted Supervisor address dynamically through the internal `supervisor` hostname, while still requiring Home Assistant Ingress identity headers.
+- Keep direct/public Notice Board authentication unchanged.
+
+
 ## 2.5.0
 
 - Add Home Assistant Ingress panel support with sidebar title and bullhorn icon.
