@@ -33,6 +33,7 @@ MAX_PDF_MB="$(jq -r '.max_pdf_upload_mb // 25' "${OPTIONS}")"
 SCHEDULER_INTERVAL="$(jq -r '.scheduler_interval_seconds // 30' "${OPTIONS}")"
 
 HASS_WEBHOOK_ID="$(jq -r '.hass_webhook_id // ""' "${OPTIONS}")"
+HASS_PERSISTENT_NOTIFICATIONS="$(jq -r '.hass_persistent_notifications // true' "${OPTIONS}")"
 NTFY_BASE_URL="$(jq -r '.ntfy_base_url // "https://ntfy.sh"' "${OPTIONS}")"
 NTFY_DEFAULT_TOPIC="$(jq -r '.ntfy_default_topic // ""' "${OPTIONS}")"
 NTFY_TOPIC_MAP="$(jq -r '.ntfy_topic_map // "{}"' "${OPTIONS}")"
@@ -55,7 +56,7 @@ if [[ -n "${HASS_WEBHOOK_ID}" ]]; then
 fi
 
 NOTIFICATIONS_ENABLED=false
-if [[ -n "${HASS_WEBHOOK_URL}" || -n "${NTFY_DEFAULT_TOPIC}" || "${NTFY_TOPIC_MAP}" != "{}" ]]; then
+if [[ "${HASS_PERSISTENT_NOTIFICATIONS}" == "true" || -n "${HASS_WEBHOOK_URL}" || -n "${NTFY_DEFAULT_TOPIC}" || "${NTFY_TOPIC_MAP}" != "{}" ]]; then
     NOTIFICATIONS_ENABLED=true
 fi
 
@@ -83,6 +84,8 @@ umask 077
 
     printf 'export GATEWAY_SHARED_SECRET=%q\n' "${INTERNAL_GATEWAY_SECRET}"
     printf 'export GATEWAY_HASS_WEBHOOK_URL=%q\n' "${HASS_WEBHOOK_URL}"
+    printf 'export GATEWAY_HASS_API_BASE=%q\n' "http://supervisor/core/api"
+    printf 'export GATEWAY_HASS_PERSISTENT_NOTIFICATIONS=%q\n' "${HASS_PERSISTENT_NOTIFICATIONS}"
     printf 'export GATEWAY_HASS_BEARER_TOKEN=%q\n' "${SUPERVISOR_TOKEN:-}"
     printf 'export GATEWAY_HASS_TIMEOUT_SECONDS=%q\n' "5"
     printf 'export GATEWAY_NTFY_BASE_URL=%q\n' "${NTFY_BASE_URL}"

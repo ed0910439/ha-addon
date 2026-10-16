@@ -25,6 +25,9 @@ configuration:
   hass_webhook_id:
     name: Home Assistant webhook ID
     description: Webhook ID of the Home Assistant automation that receives Notice Board events.
+  hass_persistent_notifications:
+    name: Home Assistant persistent notifications
+    description: Create a Home Assistant persistent notification on publish/update and dismiss it on withdrawal/expiry.
   ntfy_base_url:
     name: ntfy base URL
   ntfy_default_topic:

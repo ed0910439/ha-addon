@@ -4,9 +4,10 @@
 <div class="page-head"><div><div class="eyebrow">My Account</div><h1>我的帳號</h1><p class="muted">{{ user.display_name }} · {{ ACCOUNT_LEVEL_LABELS[user.role] }}</p></div></div>
 {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 {% if success %}<div class="alert success">{{ success }}</div>{% endif %}
+{% if is_ingress %}<div class="alert info">目前透過 Home Assistant Ingress 自動登入。這裡的密碼只用於從外部網址直接登入 Notice Board。</div>{% endif %}
 <section class="card account-settings">
   <h2>修改密碼</h2>
-  <form method="post" action="/me/account/password" class="stack">
+  <form method="post" action="{{ base_path }}/me/account/password" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>目前密碼<input type="password" name="current_password" autocomplete="current-password" required></label>
     <label>新密碼<input type="password" name="new_password" minlength="12" autocomplete="new-password" required></label>

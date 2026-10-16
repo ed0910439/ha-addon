@@ -67,14 +67,15 @@ def _migrate_legacy_schema() -> None:
                     must_change_password INTEGER NOT NULL DEFAULT 1,
                     totp_secret_enc TEXT,
                     avatar_url TEXT,
+                    hass_user_id TEXT,
                     is_active INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
-                INSERT INTO users_v2 (id,username,display_name,password_hash,role,must_change_password,totp_secret_enc,avatar_url,is_active,created_at,updated_at)
+                INSERT INTO users_v2 (id,username,display_name,password_hash,role,must_change_password,totp_secret_enc,avatar_url,hass_user_id,is_active,created_at,updated_at)
                 SELECT id,username,display_name,password_hash,
                        CASE WHEN role='ADMIN' THEN 'SYSADMIN' ELSE 'USER' END,
-                       must_change_password,totp_secret_enc,avatar_url,is_active,created_at,updated_at
+                       must_change_password,totp_secret_enc,avatar_url,NULL,is_active,created_at,updated_at
                 FROM users;
                 DROP TABLE users;
                 ALTER TABLE users_v2 RENAME TO users;
@@ -119,6 +120,14 @@ def _migrate_legacy_schema() -> None:
                 """
             )
 
+        if _table_sql(c, "users"):
+            user_cols = _columns(c, "users")
+            if "hass_user_id" not in user_cols:
+                c.execute("ALTER TABLE users ADD COLUMN hass_user_id TEXT")
+            c.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_hass_user_id ON users(hass_user_id) WHERE hass_user_id IS NOT NULL"
+            )
+
         if _table_sql(c, "announcements"):
             ann_cols = _columns(c, "announcements")
             if "body_json" not in ann_cols:
@@ -159,10 +168,12 @@ def init_db() -> None:
                 must_change_password INTEGER NOT NULL DEFAULT 1,
                 totp_secret_enc TEXT,
                 avatar_url TEXT,
+                hass_user_id TEXT,
                 is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_hass_user_id ON users(hass_user_id) WHERE hass_user_id IS NOT NULL;
             CREATE TABLE IF NOT EXISTS devices (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

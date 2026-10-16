@@ -6,7 +6,7 @@
   <h1>登入公告系統</h1>
   <p class="muted">首次登入會要求修改一次性密碼並設定第二階段驗證。</p>
   {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
-  <form method="post" action="/auth/login" class="stack">
+  <form method="post" action="{{ base_path }}/auth/login" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="next" value="{{ next }}">
     <label>帳號<input name="username" autocomplete="username" required autofocus></label>

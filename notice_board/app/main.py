@@ -56,6 +56,7 @@ NOTIFICATION_GATEWAY_ENABLED = os.getenv("NOTIFICATION_GATEWAY_ENABLED", "false"
 NOTIFICATION_GATEWAY_URL = os.getenv("NOTIFICATION_GATEWAY_URL", "").strip()
 NOTIFICATION_GATEWAY_TOKEN = os.getenv("NOTIFICATION_GATEWAY_TOKEN", "").strip()
 NOTIFICATION_GATEWAY_TIMEOUT = max(1, int(os.getenv("NOTIFICATION_GATEWAY_TIMEOUT_SECONDS", "5")))
+INGRESS_PROXY_IP = os.getenv("INGRESS_PROXY_IP", "172.30.32.2").strip()
 
 ACCOUNT_LEVEL_LABELS = {
     "SYSADMIN": "系統管理員",
@@ -120,21 +121,51 @@ templates.env.filters["fmt_dt"] = fmt_dt
 templates.env.filters["local_dt_input"] = local_dt_input
 
 
+def is_ingress_request(request: Request) -> bool:
+    client_host = request.client.host if request.client else ""
+    return bool(
+        INGRESS_PROXY_IP
+        and client_host == INGRESS_PROXY_IP
+        and request.headers.get("x-ingress-path")
+        and request.headers.get("x-remote-user-id")
+    )
+
+
+def ingress_base_path(request: Request) -> str:
+    if not is_ingress_request(request):
+        return ""
+    return request.headers.get("x-ingress-path", "").rstrip("/")
+
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     csrf = request.cookies.get(CSRF_COOKIE) or token()
     request.state.csrf_token = csrf
     response = await call_next(request)
+    ingress = is_ingress_request(request)
+    base_path = ingress_base_path(request)
+
     if not request.cookies.get(CSRF_COOKIE):
         response.set_cookie(CSRF_COOKIE, csrf, httponly=False, secure=COOKIE_SECURE, samesite="strict", max_age=60 * 60 * 24 * 365)
+
+    # Starlette routes are mounted at / inside the container. Home Assistant
+    # Ingress exposes them under a session-specific prefix, so rewrite local
+    # redirects back into that prefix without changing public/direct access.
+    location = response.headers.get("location")
+    if ingress and base_path and location and location.startswith("/") and not location.startswith(base_path + "/"):
+        response.headers["location"] = base_path + location
+
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     if request.url.path.startswith("/files/"):
-        # Authenticated PDFs may be embedded by the same Notice Board origin only.
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'self'"
+    elif ingress:
+        # The response is displayed inside the Home Assistant frontend frame.
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data: https:; style-src 'self'; script-src 'self' https://cdn.jsdelivr.net; frame-src 'self'; object-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
     else:
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data: https:; style-src 'self'; script-src 'self' https://cdn.jsdelivr.net; frame-src 'self'; object-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
@@ -189,7 +220,83 @@ def record_login_failure(c, key: str) -> None:
     c.execute("INSERT INTO login_attempts (id,attempt_key,failed_at) VALUES (?,?,?)", (str(uuid.uuid4()), key, now_iso()))
 
 
+def _ingress_username(c, requested: str, hass_user_id: str) -> str:
+    base = (requested or "").strip() or f"ha-{hass_user_id[:8]}"
+    candidate = base[:80]
+    row = c.execute("SELECT id FROM users WHERE username=? COLLATE NOCASE", (candidate,)).fetchone()
+    if not row:
+        return candidate
+    fallback = f"ha-{hass_user_id[:12]}"[:80]
+    row = c.execute("SELECT id FROM users WHERE username=? COLLATE NOCASE", (fallback,)).fetchone()
+    if not row:
+        return fallback
+    return f"ha-{hass_user_id[:8]}-{secrets.token_hex(2)}"[:80]
+
+
+def ingress_user(request: Request):
+    if not is_ingress_request(request):
+        return None
+    hass_user_id = request.headers.get("x-remote-user-id", "").strip()
+    hass_username = request.headers.get("x-remote-user-name", "").strip()
+    hass_display_name = request.headers.get("x-remote-user-display-name", "").strip() or hass_username or "Home Assistant 使用者"
+    if not hass_user_id:
+        return None
+
+    audit_event = None
+    user_id = None
+    with conn() as c:
+        existing = c.execute("SELECT * FROM users WHERE hass_user_id=?", (hass_user_id,)).fetchone()
+        if existing:
+            if not existing["is_active"]:
+                return None
+            result = dict(existing)
+            result.update({"device_id": None, "device_name": "Home Assistant Ingress", "auth_source": "INGRESS"})
+            return result
+
+        match = None
+        if hass_username:
+            match = c.execute(
+                "SELECT * FROM users WHERE username=? COLLATE NOCASE AND hass_user_id IS NULL AND role!='BOT' AND is_active=1",
+                (hass_username,),
+            ).fetchone()
+        if match:
+            user_id = match["id"]
+            c.execute(
+                "UPDATE users SET hass_user_id=?, updated_at=? WHERE id=?",
+                (hass_user_id, now_iso(), user_id),
+            )
+            audit_event = ("auth.ingress_link", {"hass_user_id": hass_user_id, "hass_username": hass_username})
+        else:
+            user_id = str(uuid.uuid4())
+            username = _ingress_username(c, hass_username, hass_user_id)
+            t = now_iso()
+            # Ingress-provisioned accounts authenticate through Home Assistant.
+            # The unknown random password prevents accidental direct password login;
+            # a sysadmin can reset it later if external login is also desired.
+            c.execute(
+                """INSERT INTO users
+                (id,username,display_name,password_hash,role,must_change_password,hass_user_id,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (user_id, username, hass_display_name[:120], hash_password(token()), "USER", 1, hass_user_id, t, t),
+            )
+            audit_event = ("auth.ingress_provision", {"hass_user_id": hass_user_id, "hass_username": hass_username})
+
+    if audit_event:
+        audit(user_id, audit_event[0], "user", user_id, audit_event[1])
+    with conn() as c:
+        row = c.execute("SELECT * FROM users WHERE id=? AND is_active=1", (user_id,)).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        result.update({"device_id": None, "device_name": "Home Assistant Ingress", "auth_source": "INGRESS"})
+        return result
+
+
 def current_user(request: Request):
+    ingress = ingress_user(request)
+    if ingress:
+        return ingress
+
     raw = request.cookies.get(DEVICE_COOKIE)
     if not raw:
         return None
@@ -206,7 +313,31 @@ def current_user(request: Request):
         if not row or parse_iso(row["device_expires_at"]) <= now:
             return None
         c.execute("UPDATE devices SET last_seen_at=? WHERE id=?", (now_iso(), row["device_id"]))
-        return dict(row)
+        result = dict(row)
+        result["auth_source"] = "DEVICE"
+        return result
+
+
+def unread_count_for_user(user: dict | None) -> int:
+    if not user or user.get("role") == "BOT":
+        return 0
+    with conn() as c:
+        return int(c.execute(
+            """
+            SELECT COUNT(*) AS n
+            FROM announcements a
+            WHERE a.deleted_at IS NULL
+              AND a.status='PUBLISHED'
+              AND a.current_version>0
+              AND NOT EXISTS (
+                SELECT 1 FROM announcement_reads_v2 r
+                WHERE r.announcement_id=a.id
+                  AND r.version_no=a.current_version
+                  AND r.user_id=?
+              )
+            """,
+            (user["id"],),
+        ).fetchone()["n"])
 
 
 def require_user(request: Request, next_url: str | None = None):
@@ -299,7 +430,15 @@ def finish_bind(request: Request, challenge: dict, device_name: str) -> Redirect
 
 
 def render(request: Request, name: str, **context):
-    context.update({"request": request, "csrf_token": request.state.csrf_token, "user": current_user(request)})
+    user = current_user(request)
+    context.update({
+        "request": request,
+        "csrf_token": request.state.csrf_token,
+        "user": user,
+        "unread_count": unread_count_for_user(user),
+        "is_ingress": is_ingress_request(request),
+        "base_path": ingress_base_path(request),
+    })
     return templates.TemplateResponse(request=request, name=name, context=context)
 
 
@@ -888,6 +1027,12 @@ def dashboard(request: Request):
     return render(request, "dashboard.html", announcements=anns)
 
 
+@app.get("/api/unread-count")
+def unread_count_api(request: Request):
+    user = require_user(request, "/")
+    return {"unread_count": unread_count_for_user(user)}
+
+
 @app.get("/a/{slug}", response_class=HTMLResponse)
 def announcement_view(request: Request, slug: str):
     try:
@@ -1380,6 +1525,23 @@ def account_reset_2fa(request: Request, user_id: str, csrf_token: str = Form(...
     return RedirectResponse("/manage/accounts", status_code=303)
 
 
+@app.post("/manage/accounts/{user_id}/unlink-hass")
+def account_unlink_hass(request: Request, user_id: str, csrf_token: str = Form(...)):
+    require_csrf(request, csrf_token)
+    admin = require_user(request)
+    require_sysadmin(admin)
+    with conn() as c:
+        row = c.execute("SELECT hass_user_id FROM users WHERE id=?", (user_id,)).fetchone()
+        if row and row["hass_user_id"]:
+            old_hass_user_id = row["hass_user_id"]
+            c.execute("UPDATE users SET hass_user_id=NULL, updated_at=? WHERE id=?", (now_iso(), user_id))
+        else:
+            old_hass_user_id = None
+    if old_hass_user_id:
+        audit(admin["id"], "account.unlink_hass", "user", user_id, {"hass_user_id": old_hass_user_id})
+    return RedirectResponse("/manage/accounts", status_code=303)
+
+
 @app.get("/me/account", response_class=HTMLResponse)
 def my_account(request: Request):
     try:
@@ -1418,7 +1580,7 @@ def my_devices(request: Request):
         return auth_redirect_for(exc)
     with conn() as c:
         devices = active_devices(c, user["id"])
-    return render(request, "devices.html", devices=devices, current_device_id=user["device_id"], max_devices=MAX_DEVICES)
+    return render(request, "devices.html", devices=devices, current_device_id=user.get("device_id"), max_devices=MAX_DEVICES)
 
 
 @app.post("/me/devices/{device_id}/revoke")

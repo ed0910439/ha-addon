@@ -25,6 +25,9 @@ configuration:
   hass_webhook_id:
     name: Home Assistant Webhook ID
     description: 接收 Notice Board 事件的 Home Assistant 自動化 Webhook ID。
+  hass_persistent_notifications:
+    name: Home Assistant 持久通知
+    description: 發布或更新公告時在 Home Assistant 通知中心建立持久通知；撤下或到期時移除。
   ntfy_base_url:
     name: ntfy 基底網址
   ntfy_default_topic:

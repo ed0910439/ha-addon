@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ announcement.title }}{% endblock %}
-{% block scripts %}<script type="module" src="/static/editor.js"></script>{% endblock %}
+{% block scripts %}<script type="module" src="{{ base_path }}/static/editor.js"></script>{% endblock %}
 {% block content %}
 <article class="card notice-view">
   <div class="row between wrap gap">
@@ -10,8 +10,8 @@
       <span class="badge context">{{ context_label }}</span>
     </div>
     <div class="row gap wrap">
-      {% if can_edit %}<a class="btn" href="/manage/announcements/{{ announcement.id }}/edit">管理我的公告</a>{% endif %}
-      {% if can_withdraw %}<form method="post" action="/manage/announcements/{{ announcement.id }}/withdraw" data-confirm="確定要撤下這則公告？"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline" type="submit">撤下公告</button></form>{% endif %}
+      {% if can_edit %}<a class="btn" href="{{ base_path }}/manage/announcements/{{ announcement.id }}/edit">管理我的公告</a>{% endif %}
+      {% if can_withdraw %}<form method="post" action="{{ base_path }}/manage/announcements/{{ announcement.id }}/withdraw" data-confirm="確定要撤下這則公告？"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline" type="submit">撤下公告</button></form>{% endif %}
     </div>
   </div>
   <h1>{{ announcement.title }}</h1>
@@ -61,7 +61,7 @@
     <h3>公開留言</h3>
     <p class="small muted">留言採單層時間排序，不建立回覆串；要回覆前一則留言，直接在下方新增一則留言即可。</p>
     {% if user.role != 'BOT' %}
-    <form method="post" action="/a/{{ announcement.slug }}/comments" class="comment-form">
+    <form method="post" action="{{ base_path }}/a/{{ announcement.slug }}/comments" class="comment-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <textarea name="body" maxlength="2000" rows="3" placeholder="留言會讓所有可閱覽這則公告的人看見" required></textarea>
       <button class="btn primary" type="submit">送出留言</button>
@@ -73,7 +73,7 @@
         <div class="avatar small-avatar">{% if c.avatar_url %}<img src="{{ c.avatar_url }}" alt="">{% else %}{{ c.display_name[:1] }}{% endif %}</div>
         <div class="comment-main"><div class="row gap wrap"><strong>{{ c.display_name }}</strong><span class="small muted">{{ c.created_at|fmt_dt }}{% if c.version_no %} · 於 v{{ c.version_no }} 留言{% endif %}</span></div><div class="comment-body">{{ c.body }}</div></div>
         {% if c.user_id == user.id %}
-        <form method="post" action="/comments/{{ c.id }}/delete" class="comment-delete">
+        <form method="post" action="{{ base_path }}/comments/{{ c.id }}/delete" class="comment-delete">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="link-danger" type="submit">刪除</button>
         </form>
         {% endif %}

@@ -17,7 +17,7 @@
 {% if not active_bot %}<div class="alert warning">目前沒有啟用中的「機器人」帳號。你仍可手動發布，但排程發布與到期自動撤下不會執行。</div>{% endif %}
 <div class="editor-layout">
   <section class="card">
-    <form method="post" class="stack" action="{{ '/manage/announcements/' + announcement.id + '/edit' if announcement and announcement.id else '/manage/announcements/new' }}">
+    <form method="post" class="stack" action="{{ base_path }}{{ '/manage/announcements/' + announcement.id + '/edit' if announcement and announcement.id else '/manage/announcements/new' }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="upload_session" value="{{ upload_session }}">
       {% if announcement and announcement.id %}<input type="hidden" name="announcement_id" value="{{ announcement.id }}">{% endif %}
@@ -56,7 +56,7 @@
       </div>
       <div class="row gap wrap">
         <button class="btn primary" type="submit">{{ '儲存待發布更新' if announcement and announcement.current_version else ('儲存草稿' if announcement and announcement.id else '建立草稿') }}</button>
-        {% if announcement and announcement.status == 'PUBLISHED' %}<a class="btn" href="/a/{{ announcement.slug }}">查看正式版</a><button class="btn copy-btn" type="button" data-copy="{{ announcement.url }}">複製公告連結</button>{% endif %}
+        {% if announcement and announcement.status == 'PUBLISHED' %}<a class="btn" href="{{ base_path }}/a/{{ announcement.slug }}">查看正式版</a><button class="btn copy-btn" type="button" data-copy="{{ announcement.url }}">複製公告連結</button>{% endif %}
       </div>
     </form>
     {% if announcement and announcement.current_version and announcement.has_unpublished_changes %}
@@ -69,17 +69,17 @@
     <section class="card">
       <h3>發布控制</h3>
       {% if announcement.current_version == 0 %}
-      <form method="post" action="/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">立即發布 v1</button></form>
+      <form method="post" action="{{ base_path }}/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">立即發布 v1</button></form>
       {% elif announcement.has_unpublished_changes %}
-      <form method="post" action="/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">發布更新 v{{ announcement.current_version + 1 }}</button></form>
+      <form method="post" action="{{ base_path }}/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">發布更新 v{{ announcement.current_version + 1 }}</button></form>
       {% elif announcement.status in ['WITHDRAWN','EXPIRED'] %}
-      <form method="post" action="/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">重新發布為 v{{ announcement.current_version + 1 }}</button></form>
+      <form method="post" action="{{ base_path }}/manage/announcements/{{ announcement.id }}/publish"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary full" type="submit">重新發布為 v{{ announcement.current_version + 1 }}</button></form>
       {% else %}
       <p class="muted small">目前 v{{ announcement.current_version }} 已是最新正式版本。</p>
       {% endif %}
 
-      {% if can_withdraw %}<form method="post" action="/manage/announcements/{{ announcement.id }}/withdraw" data-confirm="確定要撤下這則公告？"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn full" type="submit">撤下公告</button></form>{% endif %}
-      {% if can_delete %}<form method="post" action="/manage/announcements/{{ announcement.id }}/delete" data-confirm="確定要刪除這則公告？資料會保留在稽核紀錄中。"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline full" type="submit">刪除公告</button></form>{% endif %}
+      {% if can_withdraw %}<form method="post" action="{{ base_path }}/manage/announcements/{{ announcement.id }}/withdraw" data-confirm="確定要撤下這則公告？"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn full" type="submit">撤下公告</button></form>{% endif %}
+      {% if can_delete %}<form method="post" action="{{ base_path }}/manage/announcements/{{ announcement.id }}/delete" data-confirm="確定要刪除這則公告？資料會保留在稽核紀錄中。"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline full" type="submit">刪除公告</button></form>{% endif %}
     </section>
 
     <section class="card">
@@ -104,4 +104,4 @@
   </form>
 </dialog>
 {% endblock %}
-{% block scripts %}<script type="module" src="/static/editor.js"></script>{% endblock %}
+{% block scripts %}<script type="module" src="{{ base_path }}/static/editor.js"></script>{% endblock %}

@@ -8,8 +8,11 @@ const bytesLabel = (bytes) => {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const appBasePath = (document.querySelector('meta[name="app-base-path"]')?.content || '').replace(/\/$/, '')
+const appUrl = (path) => `${appBasePath}${path.startsWith('/') ? path : '/' + path}`
+
 const safeFileUrl = (fileId, download = false) =>
-  `/files/${encodeURIComponent(String(fileId || ''))}${download ? '?download=true' : ''}`
+  appUrl(`/files/${encodeURIComponent(String(fileId || ''))}${download ? '?download=true' : ''}`)
 
 const PdfAttachment = Node.create({
   name: 'pdfAttachment',
@@ -284,7 +287,7 @@ function initEditor() {
       fd.append('csrf_token', form.querySelector('input[name="csrf_token"]').value)
       fd.append('upload_session', form.querySelector('input[name="upload_session"]').value)
       fd.append('announcement_id', form.querySelector('input[name="announcement_id"]')?.value || '')
-      const response = await fetch('/api/attachments/pdf', { method: 'POST', body: fd, credentials: 'same-origin' })
+      const response = await fetch(appUrl('/api/attachments/pdf'), { method: 'POST', body: fd, credentials: 'same-origin' })
       const info = await response.json()
       if (!response.ok) throw new Error(info.error || 'PDF 上傳失敗')
       const mode = await choosePdfMode(dialog, info)

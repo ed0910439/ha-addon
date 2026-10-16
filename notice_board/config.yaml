@@ -1,5 +1,5 @@
 name: Notice Board
-version: "2.4.1"
+version: "2.5.0"
 slug: notice_board
 description: "Internal announcement board with rich text, PDF attachments, read receipts, and Home Assistant notifications."
 url: "https://github.com/ed0910439/ha-addon/tree/master/notice_board"
@@ -11,6 +11,11 @@ boot: auto
 init: false
 stage: experimental
 homeassistant_api: true
+ingress: true
+ingress_port: 8000
+panel_icon: mdi:bullhorn
+panel_title: 公告
+panel_admin: false
 backup: cold
 webui: "http://[HOST]:[PORT:8000]/"
 ports:
@@ -26,6 +31,7 @@ options:
   device_trust_days: 180
   max_pdf_upload_mb: 25
   scheduler_interval_seconds: 30
+  hass_persistent_notifications: true
   ntfy_base_url: https://ntfy.sh
   ntfy_topic_map: "{}"
 
@@ -41,6 +47,7 @@ schema:
   max_pdf_upload_mb: "int(1,200)"
   scheduler_interval_seconds: "int(10,3600)"
   hass_webhook_id: "str?"
+  hass_persistent_notifications: bool
   ntfy_base_url: url
   ntfy_default_topic: "str?"
   ntfy_topic_map: str

@@ -9,14 +9,14 @@
     {% for d in devices %}
     <div class="device-row">
       <div><strong>{{ d.name }}</strong><div class="small muted">最後使用 {{ d.last_seen_at|fmt_dt }}</div></div>
-      <form method="post" action="/setup/device-limit/revoke/{{ d.id }}">
+      <form method="post" action="{{ base_path }}/setup/device-limit/revoke/{{ d.id }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button class="btn danger-outline" type="submit">解除</button>
       </form>
     </div>
     {% endfor %}
   </div>
-  <form method="post" action="/setup/device-limit/bind" class="stack top-gap">
+  <form method="post" action="{{ base_path }}/setup/device-limit/bind" class="stack top-gap">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>目前裝置名稱<input name="device_name" maxlength="80" value="{{ device_name }}" required></label>
     <button class="btn primary" type="submit">綁定目前裝置</button>
