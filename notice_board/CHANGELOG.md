@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.2
+
+- Preserve Home Assistant Ingress path routing even when SSO identity validation fails, preventing redirects to Home Assistant's root `/login` and the resulting 404.
+- Keep Ingress presentation detection separate from trusted SSO identity validation; untrusted headers still cannot grant a Notice Board login.
+- Add a minimal Ingress diagnostic warning that records only peer/trust/header-presence flags, without logging the Home Assistant user ID or Ingress token.
+
+
 ## 2.5.1
 
 - Fix Home Assistant Ingress opening to a 404 when the Supervisor proxy address is not the previously assumed fixed IP.

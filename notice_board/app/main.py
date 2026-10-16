@@ -4,6 +4,7 @@ import asyncio
 import difflib
 import io
 import json
+import logging
 import os
 import re
 import secrets
@@ -58,6 +59,7 @@ NOTIFICATION_GATEWAY_URL = os.getenv("NOTIFICATION_GATEWAY_URL", "").strip()
 NOTIFICATION_GATEWAY_TOKEN = os.getenv("NOTIFICATION_GATEWAY_TOKEN", "").strip()
 NOTIFICATION_GATEWAY_TIMEOUT = max(1, int(os.getenv("NOTIFICATION_GATEWAY_TIMEOUT_SECONDS", "5")))
 INGRESS_PROXY_IP = os.getenv("INGRESS_PROXY_IP", "").strip()
+LOGGER = logging.getLogger("noticeboard.ingress")
 
 ACCOUNT_LEVEL_LABELS = {
     "SYSADMIN": "系統管理員",
@@ -137,7 +139,14 @@ def trusted_ingress_proxy_addresses() -> set[str]:
     return addresses
 
 
+def is_ingress_transport(request: Request) -> bool:
+    # Presentation-only check. This does not grant authentication.
+    return bool(request.headers.get("x-ingress-path"))
+
+
 def is_ingress_request(request: Request) -> bool:
+    # SSO trust remains stricter than presentation routing: identity headers are
+    # accepted only when the socket peer resolves to Supervisor.
     client_host = request.client.host if request.client else ""
     trusted_peers = trusted_ingress_proxy_addresses()
     return bool(
@@ -149,7 +158,7 @@ def is_ingress_request(request: Request) -> bool:
 
 
 def ingress_base_path(request: Request) -> str:
-    if not is_ingress_request(request):
+    if not is_ingress_transport(request):
         return ""
     return request.headers.get("x-ingress-path", "").rstrip("/")
 
@@ -159,8 +168,21 @@ async def security_middleware(request: Request, call_next):
     csrf = request.cookies.get(CSRF_COOKIE) or token()
     request.state.csrf_token = csrf
     response = await call_next(request)
-    ingress = is_ingress_request(request)
+    ingress_transport = is_ingress_transport(request)
+    ingress_identity = is_ingress_request(request)
     base_path = ingress_base_path(request)
+
+    if ingress_transport and not ingress_identity and request.url.path == "/":
+        client_host = request.client.host if request.client else ""
+        LOGGER.warning(
+            "Ingress transport detected but SSO identity was not trusted: "
+            "peer=%s trusted_peer=%s remote_user_id=%s remote_user_name=%s hass_source=%s",
+            client_host or "unknown",
+            client_host in trusted_ingress_proxy_addresses() if client_host else False,
+            bool(request.headers.get("x-remote-user-id")),
+            bool(request.headers.get("x-remote-user-name")),
+            request.headers.get("x-hass-source", "missing"),
+        )
 
     if not request.cookies.get(CSRF_COOKIE):
         response.set_cookie(CSRF_COOKIE, csrf, httponly=False, secure=COOKIE_SECURE, samesite="strict", max_age=60 * 60 * 24 * 365)
@@ -169,7 +191,7 @@ async def security_middleware(request: Request, call_next):
     # Ingress exposes them under a session-specific prefix, so rewrite local
     # redirects back into that prefix without changing public/direct access.
     location = response.headers.get("location")
-    if ingress and base_path and location and location.startswith("/") and not location.startswith(base_path + "/"):
+    if ingress_transport and base_path and location and location.startswith("/") and not location.startswith(base_path + "/"):
         response.headers["location"] = base_path + location
 
     response.headers["Cache-Control"] = "no-store"
@@ -179,7 +201,7 @@ async def security_middleware(request: Request, call_next):
     if request.url.path.startswith("/files/"):
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'self'"
-    elif ingress:
+    elif ingress_transport:
         # The response is displayed inside the Home Assistant frontend frame.
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data: https:; style-src 'self'; script-src 'self' https://cdn.jsdelivr.net; frame-src 'self'; object-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
