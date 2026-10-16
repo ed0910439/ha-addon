@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.3
+
+- Fix Home Assistant Ingress SSO trust by preserving the real socket peer seen by the Notice Board process.
+- Stop Uvicorn from trusting arbitrary `X-Forwarded-For` values with `--forwarded-allow-ips "*"`; this previously replaced the Supervisor peer address with the browser/client IPv6 address.
+- Keep SSO gated by the trusted Supervisor peer plus `X-Ingress-Path` and `X-Remote-User-Id`.
+- Public/direct Notice Board access continues to use the configured public URL, password/TOTP, and Cloudflare-specific client IP handling where enabled.
+
+
 ## 2.5.2
 
 - Preserve Home Assistant Ingress path routing even when SSO identity validation fails, preventing redirects to Home Assistant's root `/login` and the resulting 404.

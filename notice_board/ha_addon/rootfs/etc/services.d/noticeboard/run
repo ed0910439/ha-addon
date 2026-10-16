@@ -9,5 +9,4 @@ bashio::log.info "Starting Notice Board on port 8000"
 exec /opt/venv/bin/uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
-    --proxy-headers \
-    --forwarded-allow-ips "*"
+    --no-proxy-headers
