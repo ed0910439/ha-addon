@@ -2,7 +2,7 @@
 
 ## Notice Board
 
-This repository provides **Notice Board 2.4.0**, an internal announcement app with rich text, PDF attachments, read receipts, Home Assistant notifications, and ntfy fallback.
+This repository provides **Notice Board 2.5.3**, an internal announcement app with rich text, PDF attachments, read receipts, Home Assistant notifications, and ntfy fallback.
 
 Add this repository in Home Assistant:
 

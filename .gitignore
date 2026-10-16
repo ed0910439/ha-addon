@@ -1,3 +1,18 @@
 eWeLink_Smart_Home/dist/test
 .vscode
 .history
+
+# Secrets and runtime data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.yaml
+**/notice.db
+**/*.sqlite
+**/*.sqlite3
+**/uploads/
+**/data/

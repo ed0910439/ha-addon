@@ -2,3 +2,16 @@ __pycache__/
 *.py[cod]
 .DS_Store
 *.log
+.git/
+.github/
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+data/
+*.pem
+*.key
+*.p12
+*.pfx
