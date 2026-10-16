@@ -1,0 +1,232 @@
+name: One-time privacy history rewrite
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/privacy-rewrite.yml
+
+permissions:
+  contents: write
+  actions: write
+  packages: write
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild sanitized root history
+        shell: bash
+        env:
+          NOREPLY_EMAIL: 79468365+ed0910439@users.noreply.github.com
+        run: |
+          set -euo pipefail
+
+          git checkout --orphan privacy-clean
+          git reset
+          rm -f .github/workflows/privacy-rewrite.yml
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              'README.md': [
+                  ('# Home Assistant Apps', '# Home Assistant Apps'),
+                  ('SUPERVISOR_TOKEN=REPLACE_WITH_TOKEN', 'SUPERVISOR_TOKEN=REPLACE_WITH_TOKEN'),
+              ],
+              'repository.yaml': [
+                  ('name: Home Assistant Apps', 'name: Home Assistant Apps'),
+              ],
+              'repository.json': [
+                  ('"name": "Home Assistant Apps"', '"name": "Home Assistant Apps"'),
+              ],
+              'notice_board/DOCS.md': [
+                  ("'user_a'", "'user_a'"),
+                  ("'user_b'", "'user_b'"),
+                  ('USER_A_PHONE', 'USER_A_PHONE'),
+                  ('USER_B_PHONE', 'USER_B_PHONE'),
+                  ('{"user_a":"noticeboard-user-a-long-random-topic"}', '{"user_a":"noticeboard-user-a-long-random-topic"}'),
+              ],
+              'notice_board/Dockerfile': [
+                  ('org.opencontainers.image.source="https://github.com/ed0910439/ha-addon"',
+                   'org.opencontainers.image.source="https://github.com/ed0910439/ha-addon"'),
+              ],
+          }
+
+          for filename, pairs in replacements.items():
+              path = Path(filename)
+              if not path.exists():
+                  continue
+              text = path.read_text(encoding='utf-8')
+              for old, new in pairs:
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8')
+
+          gitignore = Path('.gitignore')
+          current = gitignore.read_text(encoding='utf-8') if gitignore.exists() else ''
+          extra = '''
+# Secrets and runtime data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.yaml
+**/notice.db
+**/*.sqlite
+**/*.sqlite3
+**/uploads/
+**/data/
+'''
+          gitignore.write_text(current.rstrip() + '\n' + extra.strip() + '\n', encoding='utf-8')
+
+          Path('notice_board/.dockerignore').write_text('''__pycache__/
+*.py[cod]
+.DS_Store
+*.log
+.git/
+.github/
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+data/
+*.pem
+*.key
+*.p12
+*.pfx
+''', encoding='utf-8')
+
+          workflows = Path('.github/workflows')
+          workflows.mkdir(parents=True, exist_ok=True)
+          Path('.github/workflows/notice-board-ghcr.yml').write_text('''name: Build Notice Board image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "notice_board/**"
+      - ".github/workflows/notice-board-ghcr.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version: *"\\([^"]*\\)"/\\1/p' notice_board/config.yaml)"
+          test -n "${version}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - hass_arch: amd64
+            platform: linux/amd64
+          - hass_arch: aarch64
+            platform: linux/arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./notice_board
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/notice-board:${{ needs.prepare.outputs.version }}-${{ matrix.hass_arch }}
+          build-args: |
+            BUILD_VERSION=${{ needs.prepare.outputs.version }}
+            BUILD_ARCH=${{ matrix.hass_arch }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+
+  manifest:
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish multi-architecture manifest
+        shell: bash
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/notice-board
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${IMAGE}:${VERSION}" \
+            "${IMAGE}:${VERSION}-amd64" \
+            "${IMAGE}:${VERSION}-aarch64"
+          docker buildx imagetools create \
+            --tag "${IMAGE}:latest" \
+            "${IMAGE}:${VERSION}-amd64" \
+            "${IMAGE}:${VERSION}-aarch64"
+''', encoding='utf-8')
+          PY
+
+          git config user.name 'ed0910439'
+          git config user.email "${NOREPLY_EMAIL}"
+          export GIT_AUTHOR_NAME='ed0910439'
+          export GIT_AUTHOR_EMAIL="${NOREPLY_EMAIL}"
+          export GIT_COMMITTER_NAME='ed0910439'
+          export GIT_COMMITTER_EMAIL="${NOREPLY_EMAIL}"
+
+          git add -A
+          git commit -m 'chore: establish sanitized public release history'
+          CLEAN_SHA="$(git rev-parse HEAD)"
+
+          test "$(git rev-list --count HEAD)" = '1'
+          test "$(git log -1 --format='%ae')" = "${NOREPLY_EMAIL}"
+          test "$(git log -1 --format='%ce')" = "${NOREPLY_EMAIL}"
+
+          git push origin HEAD:master --force
+
+          REMOTE_SHA="$(git ls-remote origin refs/heads/master | awk '{print $1}')"
+          test "${REMOTE_SHA}" = "${CLEAN_SHA}"
+
+      - name: Trigger GHCR build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sleep 8
+          gh workflow run notice-board-ghcr.yml --ref master --repo "${GITHUB_REPOSITORY}"
+
