@@ -131,7 +131,7 @@ Ingress 由 Home Assistant 先完成使用者驗證。Notice Board 只在請求�
 https://notice.example.com
 ```
 
-因此手機通知 deep link 不會依賴 Ingress 的暫時 session URL。
+2.5.4 起，Home Assistant Persistent Notification 與 Companion App 手機推播會優先使用 Home Assistant 站內路徑 `/app/notice_board/a/<slug>`。Home Assistant 會自行建立 Ingress session，Notice Board 不會把登入憑證或 session token 放進通知網址。公開固定網址仍保留給 ntfy、複製連結與瀏覽器外部開啟。
 
 ## 未讀狀態
 
@@ -168,7 +168,7 @@ http://supervisor/core/api/webhook/<hass_webhook_id>
 - `announcement.withdrawn`
 - `announcement.expired`
 
-Home Assistant automation 可依 payload 裡的 `recipient` 對應至各自的 `notify.mobile_app_*`。
+Home Assistant automation 可依 payload 裡的 `recipient` 對應至各自的 `notify.mobile_app_*`。payload 同時提供 `url`（公開網址）與 `hass_path`（Home Assistant 站內路徑）；Companion App 推播應優先使用 `hass_path`。
 
 ### 手機 Push 自動化範例
 
@@ -222,7 +222,8 @@ actions:
               title: "{{ notice_title | trim }}"
               message: "{{ notice_message | trim }}"
               data:
-                url: "{{ trigger.json.url }}"
+                url: "{{ trigger.json.hass_path | default(trigger.json.url, true) }}"
+                clickAction: "{{ trigger.json.hass_path | default(trigger.json.url, true) }}"
                 tag: "notice_board_{{ trigger.json.announcement_id }}"
 
       - conditions: "{{ trigger.json.recipient == 'user_b' }}"
@@ -232,11 +233,12 @@ actions:
               title: "{{ notice_title | trim }}"
               message: "{{ notice_message | trim }}"
               data:
-                url: "{{ trigger.json.url }}"
+                url: "{{ trigger.json.hass_path | default(trigger.json.url, true) }}"
+                clickAction: "{{ trigger.json.hass_path | default(trigger.json.url, true) }}"
                 tag: "notice_board_{{ trigger.json.announcement_id }}"
 ```
 
-把範例中的 Notice Board username 與 `notify.mobile_app_...` 改成你實際的帳號／裝置即可。固定的 `tag` 讓同一公告更新時可覆蓋同一組手機通知，而不是一直堆新通知。
+把範例中的 Notice Board username 與 `notify.mobile_app_...` 改成你實際的帳號／裝置即可。相對的 `hass_path` 會讓 iOS/Android Companion App 在 Home Assistant 站內開啟公告；Android 使用 `clickAction`，iOS 使用 `url`。固定的 `tag` 讓同一公告更新時可覆蓋同一組手機通知，而不是一直堆新通知。
 
 ## Home Assistant 持久通知
 

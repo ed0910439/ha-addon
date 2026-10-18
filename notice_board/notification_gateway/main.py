@@ -209,10 +209,11 @@ class NotificationGateway:
             details = [f"版本 v{event['version']}"]
             if creator_name:
                 details.append(f"發布者 {creator_name}")
+            hass_link = str(event.get("hass_path") or event["url"])
             payload = {
                 "notification_id": notification_id,
                 "title": f"{labels.get(event['event'], '📢 公告')}：{event['title']}",
-                "message": f"[開啟公告]({event['url']})\n\n" + " · ".join(details),
+                "message": f"[開啟公告]({hass_link})\n\n" + " · ".join(details),
             }
 
         try:

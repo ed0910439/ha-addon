@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.5.4
+
+- Add an atomic "save and publish" path so the exact editor contents being viewed are written before a new announcement version is created.
+- Keep the legacy publish endpoint for republishing an unchanged withdrawn/expired announcement, while directing normal edits through the safer combined action.
+- Add a Home Assistant in-app path (`/app/notice_board/a/<slug>`) to notification payloads while retaining the public URL for external links and ntfy.
+- Open Home Assistant persistent notifications through the in-app route instead of the public browser URL.
+- Add Home Assistant panel route synchronization so deep links can open a specific Notice Board announcement inside the Companion App without putting authentication tokens in URLs.
+- Document `url` + Android `clickAction` usage with the relative `hass_path` for Companion App notifications.
+
+
 ## 2.5.3
 
 - Fix Home Assistant Ingress SSO trust by preserving the real socket peer seen by the Notice Board process.

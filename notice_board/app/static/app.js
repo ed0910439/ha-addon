@@ -1,6 +1,63 @@
 const appBasePath = (document.querySelector('meta[name="app-base-path"]')?.content || '').replace(/\/$/, '')
 const appUrl = (path) => `${appBasePath}${path.startsWith('/') ? path : '/' + path}`
 
+const HASS_ROUTE_STORAGE_KEY = 'notice-board:hass-route'
+
+function currentAppPath() {
+  const pathname = window.location.pathname || '/'
+  if (appBasePath && pathname.startsWith(appBasePath)) {
+    const rest = pathname.slice(appBasePath.length)
+    return rest.startsWith('/') ? rest : `/${rest}`
+  }
+  return pathname.startsWith('/') ? pathname : `/${pathname}`
+}
+
+function hassPanelPath(appPath) {
+  const normalized = appPath && appPath !== '/' ? appPath : ''
+  return `/app/notice_board${normalized}`
+}
+
+function enableHomeAssistantRouteSync() {
+  if (window.parent === window) return
+
+  let storedRoute = sessionStorage.getItem(HASS_ROUTE_STORAGE_KEY) || ''
+  const localPath = currentAppPath()
+
+  // If the iframe navigated internally (links, forms, redirects), keep the
+  // Home Assistant panel URL in sync before subscribing for parent updates.
+  if (storedRoute && storedRoute !== localPath) {
+    storedRoute = localPath
+    sessionStorage.setItem(HASS_ROUTE_STORAGE_KEY, storedRoute)
+    window.parent.postMessage(
+      { type: 'home-assistant/navigate', path: hassPanelPath(localPath), options: { replace: true } },
+      '*',
+    )
+  }
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== window.parent) return
+    const data = event.data
+    if (!data || data.type !== 'home-assistant/properties') return
+
+    const routePath = data.route?.path
+    if (typeof routePath !== 'string' || !routePath.startsWith('/')) return
+    if (routePath !== '/' && !routePath.startsWith('/a/')) return
+
+    if (routePath === storedRoute) return
+    storedRoute = routePath
+    sessionStorage.setItem(HASS_ROUTE_STORAGE_KEY, storedRoute)
+
+    const target = appUrl(routePath)
+    if (window.location.pathname !== target) {
+      window.location.replace(target)
+    }
+  })
+
+  window.parent.postMessage({ type: 'home-assistant/subscribe-properties' }, '*')
+}
+
+enableHomeAssistantRouteSync()
+
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;

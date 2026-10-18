@@ -826,6 +826,10 @@ def _outbound_notice_url(slug: str) -> str:
     return f"{base}/a/{slug}" if base else f"/a/{slug}"
 
 
+def _hass_notice_path(slug: str) -> str:
+    return f"/app/notice_board/a/{slug}"
+
+
 def queue_notification_event(announcement_id: str, event_type: str, source: str, version: int | None = None) -> int:
     """Queue one recipient-specific event for the Notification Gateway.
 
@@ -857,6 +861,7 @@ def queue_notification_event(announcement_id: str, event_type: str, source: str,
                 "previous_version": current_version - 1 if current_version > 1 else None,
                 "title": ann["title"],
                 "url": _outbound_notice_url(ann["slug"]),
+                "hass_path": _hass_notice_path(ann["slug"]),
                 "source": source,
                 "published_at": ann["published_at"],
                 "recipient": recipient["username"],
@@ -1309,6 +1314,7 @@ def announcement_new_action(
     upload_session: str = Form(""),
     scheduled_publish_at: str = Form(""),
     expires_at: str = Form(""),
+    publish_now: str = Form(""),
     csrf_token: str = Form(...),
 ):
     require_csrf(request, csrf_token)
@@ -1320,6 +1326,7 @@ def announcement_new_action(
     t = now_iso()
     scheduled = local_form_to_utc(scheduled_publish_at)
     expires = local_form_to_utc(expires_at)
+    published_version = None
     try:
         with conn() as c:
             doc, text = _submission_doc(c, user, body_json, body, None, upload_session)
@@ -1332,6 +1339,11 @@ def announcement_new_action(
                 (aid, slug, title, text, dump_doc(doc), "DRAFT", 0, scheduled, expires, user["id"], user["id"], t, t),
             )
             _bind_pending_attachments(c, aid, user["id"], upload_session, doc)
+            if publish_now:
+                fresh = c.execute("SELECT * FROM announcements WHERE id=?", (aid,)).fetchone()
+                changed, version = _publish_in_connection(c, fresh, user["id"])
+                if changed:
+                    published_version = version
     except ValueError as exc:
         try:
             submitted_doc = load_doc(body_json, body)
@@ -1339,6 +1351,9 @@ def announcement_new_action(
             submitted_doc = legacy_text_doc(body)
         return render(request, "announcement_edit.html", announcement={"title": title, "body": body}, revisions=[], error=str(exc), active_bot=None, can_edit=True, can_publish=True, can_withdraw=False, can_delete=False, editor_doc=submitted_doc, upload_session=upload_session or token())
     audit(user["id"], "announcement.create_draft", "announcement", aid, {"scheduled_publish_at": scheduled, "expires_at": expires})
+    if published_version is not None:
+        audit(user["id"], "announcement.publish", "announcement", aid, {"version": published_version})
+        queue_notification_event(aid, "announcement.published", "manual", published_version)
     return RedirectResponse(f"/manage/announcements/{aid}/edit", status_code=303)
 
 
@@ -1379,6 +1394,7 @@ def announcement_edit_action(
     upload_session: str = Form(""),
     scheduled_publish_at: str = Form(""),
     expires_at: str = Form(""),
+    publish_now: str = Form(""),
     csrf_token: str = Form(...),
 ):
     require_csrf(request, csrf_token)
@@ -1415,7 +1431,23 @@ def announcement_edit_action(
                 """UPDATE announcements SET title=?,body=?,body_json=?,scheduled_publish_at=?,expires_at=?,updated_by=?,updated_at=? WHERE id=?""",
                 (title, text, doc_json, scheduled, expires, user["id"], t, announcement_id),
             )
+
+        published_version = None
+        if publish_now:
+            fresh = c.execute("SELECT * FROM announcements WHERE id=? AND deleted_at IS NULL", (announcement_id,)).fetchone()
+            changed, version = _publish_in_connection(c, fresh, user["id"])
+            if changed:
+                published_version = version
+
     audit(user["id"], "announcement.edit_draft", "announcement", announcement_id, {"published_version": ann["current_version"], "scheduled_publish_at": scheduled, "expires_at": expires})
+    if published_version is not None:
+        audit(user["id"], "announcement.publish", "announcement", announcement_id, {"version": published_version})
+        queue_notification_event(
+            announcement_id,
+            "announcement.published" if published_version == 1 else "announcement.updated",
+            "manual",
+            published_version,
+        )
     return RedirectResponse(f"/manage/announcements/{announcement_id}/edit", status_code=303)
 
 
