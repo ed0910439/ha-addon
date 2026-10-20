@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.5
+
+- Refine the announcement board layout for tablet and mobile breakpoints.
+- Improve touch target sizes, action-button wrapping, editor toolbar scrolling, and PDF preview sizing on narrow screens.
+- Prevent long announcement titles, metadata, and rich-text content from causing horizontal overflow.
+
+
 ## 2.5.4
 
 - Add an atomic "save and publish" path so the exact editor contents being viewed are written before a new announcement version is created.
