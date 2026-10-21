@@ -1,9 +1,28 @@
 {% extends "base.html" %}
-{% block title %}我的裝置{% endblock %}
+{% block title %}設定｜裝置{% endblock %}
 {% block content %}
-<div class="page-head"><div><div class="eyebrow">Trusted Devices</div><h1>我的裝置</h1><p class="muted">每個帳號最多 {{ max_devices }} 台；解除後該裝置下次開啟公告會重新要求登入與 2FA。</p></div></div>
-{% if is_ingress %}<div class="alert info">目前這個工作階段由 Home Assistant 驗證，不占用 Notice Board 的可信裝置名額。</div>{% endif %}
+<div class="page-head"><div><h1>設定</h1><p class="muted">解除裝置前必須再次輸入目前密碼；解除後該裝置需重新登入與完成 2FA。</p></div></div>
+<nav class="settings-tabs" aria-label="設定選單"><a href="{{ base_path }}/me/account">我的帳號</a><a class="is-active" href="{{ base_path }}/me/devices" aria-current="page">裝置</a></nav>
+{% if error %}<div class="alert danger" role="alert">{{ error }}</div>{% endif %}
+{% if is_ingress %}<div class="alert info">目前工作階段由 Home Assistant 驗證，不占用可信裝置名額，也無須解除目前 HA 工作階段。下方僅管理從外部網址登入的裝置。</div>{% endif %}
 <section class="card device-list">
-  {% for d in devices %}<div class="device-row"><div><strong>{{ d.name }}</strong>{% if d.id == current_device_id %}<span class="badge published">目前裝置</span>{% endif %}<div class="small muted">首次 {{ d.first_seen_at|fmt_dt }} · 最後 {{ d.last_seen_at|fmt_dt }}</div></div><form method="post" action="{{ base_path }}/me/devices/{{ d.id }}/revoke"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline" type="submit">解除</button></form></div>{% else %}<p>沒有已綁定裝置。</p>{% endfor %}
+  <h2>已認證裝置 <span class="count">最多 {{ max_devices }} 台</span></h2>
+  {% for d in devices %}
+  <div class="device-row">
+    <div>
+      <strong>{{ d.name }}</strong>
+      {% if d.id == current_device_id %}<span class="badge published">目前裝置</span>{% endif %}
+      <div class="small muted">首次 {{ d.first_seen_at|fmt_dt }} · 最後 {{ d.last_seen_at|fmt_dt }}</div>
+    </div>
+    <details>
+      <summary>解除{% if d.id == current_device_id %}此{% endif %}裝置</summary>
+      <form method="post" action="{{ base_path }}/me/devices/{{ d.id }}/revoke" class="device-revoke-form top-gap" data-confirm="確定解除這台裝置？解除後該裝置必須重新登入與完成 2FA。">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>目前密碼<input type="password" name="current_password" autocomplete="current-password" required></label>
+        <button class="btn danger-outline" type="submit">驗證並解除</button>
+      </form>
+    </details>
+  </div>
+  {% else %}<p class="muted">沒有已綁定裝置。</p>{% endfor %}
 </section>
 {% endblock %}

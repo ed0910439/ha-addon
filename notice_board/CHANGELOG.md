@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.6.0
+
+**Manus AI 更新 — 2026-10-21.** Minor release: new dashboard interactions and settings features; existing authentication and announcement endpoints are retained.
+
+- **Manus AI update:** Redesign the dashboard with a compact ProComponents-inspired layout, interactive summary filters, and responsive card groups.
+- **Manus AI update:** Show only published announcements on the home page; published announcements with pending edits continue to show their current published version.
+- **Manus AI update:** Add Settings navigation for account and trusted-device management, and require current-password re-verification before revoking a device.
+- **Manus AI update:** Hide device logout controls in Home Assistant Ingress mode, add a footer with service and user-term links, and improve home-page navigation state.
+- **Manus AI update:** Place the live unread indicator beside the Notice Board brand, hide redundant home navigation, and show a return-home link on other pages.
+- **Manus AI update:** Respect hidden attributes for filtered cards and empty states so an empty-result box is never displayed alongside matching announcements.
+- **Manus AI update:** Add explicit device-revocation confirmation, limit password re-verification failures, enforce device ownership, and route legacy logout requests to the verified device-management flow.
+- **Manus AI update:** Add isolated regression tests for published content, navigation, footer links, Home Assistant presentation, CSRF protection, and device revocation.
+
+
 ## 2.5.5
 
 - Refine the announcement board layout for tablet and mobile breakpoints.

@@ -477,6 +477,7 @@ def render(request: Request, name: str, **context):
         "unread_count": unread_count_for_user(user),
         "is_ingress": is_ingress_request(request),
         "base_path": ingress_base_path(request),
+        "current_year": datetime.now(DISPLAY_TZ).year,
     })
     return templates.TemplateResponse(request=request, name=name, context=context)
 
@@ -657,16 +658,9 @@ def device_limit_bind(request: Request, device_name: str = Form(...), csrf_token
 @app.post("/logout")
 def logout(request: Request, csrf_token: str = Form(...)):
     require_csrf(request, csrf_token)
-    user = current_user(request)
-    raw = request.cookies.get(DEVICE_COOKIE)
-    if raw:
-        with conn() as c:
-            c.execute("UPDATE devices SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL", (now_iso(), token_hash(raw)))
-    if user:
-        audit(user["id"], "device.logout_revoke", "device", user.get("device_id"))
-    response = RedirectResponse("/login", status_code=303)
-    response.delete_cookie(DEVICE_COOKIE)
-    return response
+    require_user(request)
+    # Legacy callers must use the verified device-management flow too.
+    return RedirectResponse("/me/devices", status_code=303)
 
 
 def announcement_url(request: Request, slug: str) -> str:
@@ -1037,30 +1031,17 @@ def dashboard(request: Request):
     except HTTPException as exc:
         return auth_redirect_for(exc)
     with conn() as c:
-        if user["role"] in {"USER", "SYSADMIN"}:
-            rows = c.execute(
-                """
-                SELECT a.*, u.display_name AS author_name,
-                  (SELECT COUNT(*) FROM announcement_reads_v2 r WHERE r.announcement_id=a.id AND r.version_no=a.current_version) AS read_count,
-                  EXISTS(SELECT 1 FROM announcement_reads_v2 rr WHERE rr.announcement_id=a.id AND rr.version_no=a.current_version AND rr.user_id=?) AS has_read_current
-                FROM announcements a JOIN users u ON u.id=a.created_by
-                WHERE a.deleted_at IS NULL AND (a.status='PUBLISHED' OR a.created_by=?)
-                ORDER BY CASE WHEN a.status='PUBLISHED' THEN COALESCE(a.published_at,a.updated_at) ELSE a.updated_at END DESC
-                """,
-                (user["id"], user["id"]),
-            ).fetchall()
-        else:
-            rows = c.execute(
-                """
-                SELECT a.*, u.display_name AS author_name,
-                  (SELECT COUNT(*) FROM announcement_reads_v2 r WHERE r.announcement_id=a.id AND r.version_no=a.current_version) AS read_count,
-                  EXISTS(SELECT 1 FROM announcement_reads_v2 rr WHERE rr.announcement_id=a.id AND rr.version_no=a.current_version AND rr.user_id=?) AS has_read_current
-                FROM announcements a JOIN users u ON u.id=a.created_by
-                WHERE a.deleted_at IS NULL AND a.status='PUBLISHED'
-                ORDER BY a.published_at DESC
-                """,
-                (user["id"],),
-            ).fetchall()
+        rows = c.execute(
+            """
+            SELECT a.*, u.display_name AS author_name,
+              (SELECT COUNT(*) FROM announcement_reads_v2 r WHERE r.announcement_id=a.id AND r.version_no=a.current_version) AS read_count,
+              EXISTS(SELECT 1 FROM announcement_reads_v2 rr WHERE rr.announcement_id=a.id AND rr.version_no=a.current_version AND rr.user_id=?) AS has_read_current
+            FROM announcements a JOIN users u ON u.id=a.created_by
+            WHERE a.deleted_at IS NULL AND a.status='PUBLISHED'
+            ORDER BY COALESCE(a.published_at,a.updated_at) DESC
+            """,
+            (user["id"],),
+        ).fetchall()
     anns = []
     for r in rows:
         d = dict(r) | {"url": announcement_url(request, r["slug"])}
@@ -1068,7 +1049,22 @@ def dashboard(request: Request):
         d["can_edit"] = can_edit(user, d)
         d["can_withdraw"] = can_withdraw(user, d)
         anns.append(d)
-    return render(request, "dashboard.html", announcements=anns)
+    today = datetime.now(DISPLAY_TZ)
+    weekdays = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+    dashboard_summary = {
+        "total": len(anns),
+        "published": sum(1 for ann in anns if ann["status"] == "PUBLISHED"),
+        "unread": sum(1 for ann in anns if ann["status"] == "PUBLISHED" and not ann["has_read_current"]),
+        "pending": sum(1 for ann in anns if ann["has_unpublished_changes"]),
+    }
+    return render(
+        request,
+        "dashboard.html",
+        announcements=anns,
+        dashboard_date=today.strftime("%Y年%m月%d日"),
+        dashboard_weekday=weekdays[today.weekday()],
+        dashboard_summary=dashboard_summary,
+    )
 
 
 @app.get("/api/unread-count")
@@ -1622,6 +1618,22 @@ def my_account(request: Request):
     return render(request, "account.html", error=None, success=None)
 
 
+@app.get("/terms", response_class=HTMLResponse)
+def terms_page(request: Request):
+    return render(request, "legal.html", legal_title="服務條款", legal_kicker="Terms of Service", legal_paragraphs=[
+        "公告系統提供團隊公告的建立、發布、閱讀與裝置驗證功能。使用本系統即表示你同意依組織規範使用服務。",
+        "系統管理員可依稽核與資安需要管理帳號、公告版本及已認證裝置。服務內容與管理規則可能依部署環境調整。",
+    ])
+
+
+@app.get("/user-terms", response_class=HTMLResponse)
+def user_terms_page(request: Request):
+    return render(request, "legal.html", legal_title="使用者條款", legal_kicker="User Terms", legal_paragraphs=[
+        "使用者應妥善保管帳號、密碼與第二階段驗證資訊，不得將帳號提供給未獲授權的人員使用。",
+        "使用者發布公告時，應確認內容正確且符合組織的資訊安全與資料使用規範。若發現帳號或裝置異常，請立即在設定的裝置頁解除。",
+    ])
+
+
 @app.post("/me/account/password", response_class=HTMLResponse)
 def my_password_change(
     request: Request,
@@ -1651,17 +1663,34 @@ def my_devices(request: Request):
         return auth_redirect_for(exc)
     with conn() as c:
         devices = active_devices(c, user["id"])
-    return render(request, "devices.html", devices=devices, current_device_id=user.get("device_id"), max_devices=MAX_DEVICES)
+    return render(request, "devices.html", devices=devices, current_device_id=user.get("device_id"), max_devices=MAX_DEVICES, error=None)
 
 
 @app.post("/me/devices/{device_id}/revoke")
-def my_device_revoke(request: Request, device_id: str, csrf_token: str = Form(...)):
+def my_device_revoke(request: Request, device_id: str, current_password: str = Form(""), csrf_token: str = Form(...)):
     require_csrf(request, csrf_token)
     user = require_user(request)
+    key = login_attempt_key(request, "device-revoke:" + user["id"])
+    error = None
     with conn() as c:
-        c.execute("UPDATE devices SET revoked_at=? WHERE id=? AND user_id=? AND revoked_at IS NULL", (now_iso(), device_id, user["id"]))
+        device = c.execute("SELECT id FROM devices WHERE id=? AND user_id=? AND revoked_at IS NULL", (device_id, user["id"])).fetchone()
+        if not device:
+            raise HTTPException(404, "裝置不存在或已解除")
+        stored = c.execute("SELECT password_hash FROM users WHERE id=?", (user["id"],)).fetchone()
+        if too_many_login_failures(c, key):
+            error = "驗證嘗試過多，請稍後再試。未解除裝置。"
+        elif not stored or not verify_password(current_password, stored["password_hash"]):
+            record_login_failure(c, key)
+            error = "目前密碼不正確，未解除裝置。"
+        if error:
+            devices = active_devices(c, user["id"])
+        else:
+            c.execute("DELETE FROM login_attempts WHERE attempt_key=?", (key,))
+            c.execute("UPDATE devices SET revoked_at=? WHERE id=? AND user_id=? AND revoked_at IS NULL", (now_iso(), device_id, user["id"]))
+    if error:
+        return render(request, "devices.html", devices=devices, current_device_id=user.get("device_id"), max_devices=MAX_DEVICES, error=error)
     audit(user["id"], "device.revoke", "device", device_id)
-    if device_id == user["device_id"]:
+    if device_id == user.get("device_id"):
         response = RedirectResponse("/login", status_code=303)
         response.delete_cookie(DEVICE_COOKIE)
         return response

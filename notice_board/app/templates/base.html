@@ -10,30 +10,26 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="{{ base_path }}/">公告系統</a>
+  <header class="topbar pro-layout-header">
+    <a class="brand" href="{{ base_path }}/">公告系統{% if user %}<span class="nav-unread-dot" data-unread-badge title="{{ unread_count }} 則未讀" aria-label="{{ unread_count }} 則未讀公告" {% if unread_count == 0 %}hidden{% endif %}></span>{% endif %}</a>
     {% if user %}
-    <nav class="nav">
-      <a class="nav-notice-link" href="{{ base_path }}/">公告<span class="nav-unread-dot" data-unread-badge title="{{ unread_count }} 則未讀" {% if unread_count == 0 %}hidden{% endif %}></span></a>
+    <nav class="nav pro-layout-nav">
+      {% if request.url.path != '/' %}<a class="nav-notice-link" href="{{ base_path }}/">回首頁</a>{% endif %}
       {% if user.role in ['USER', 'SYSADMIN'] %}<a href="{{ base_path }}/manage/announcements/new">新增公告</a>{% endif %}
       {% if user.role == 'SYSADMIN' %}<a href="{{ base_path }}/manage/accounts">帳號管理</a>{% endif %}
-      <a href="{{ base_path }}/me/account">我的帳號</a>
-      <a href="{{ base_path }}/me/devices">裝置</a>
+      <a href="{{ base_path }}/me/account">設定</a>
       <span class="user-chip">{{ user.display_name }} · {{ ACCOUNT_LEVEL_LABELS[user.role] }}{% if is_ingress %} · HA{% endif %}</span>
-      {% if is_ingress %}
-      <span class="ingress-chip">Home Assistant 已登入</span>
-      {% else %}
-      <form method="post" action="{{ base_path }}/logout" class="inline-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="btn ghost" type="submit">解除此裝置</button>
-      </form>
-      {% endif %}
+      {% if is_ingress %}<span class="ingress-chip">Home Assistant 已登入</span>{% endif %}
     </nav>
     {% endif %}
   </header>
-  <main class="container">
+  <main class="container pro-layout-content">
     {% block content %}{% endblock %}
   </main>
+  <footer class="site-footer">
+    <span>© {{ current_year }} 公告系統</span>
+    <nav aria-label="頁尾連結"><a href="{{ base_path }}/terms">服務條款</a><a href="{{ base_path }}/user-terms">使用者條款</a></nav>
+  </footer>
   {% block scripts %}{% endblock %}
 </body>
 </html>

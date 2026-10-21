@@ -98,3 +98,54 @@ async function refreshUnreadBadge() {
 
 refreshUnreadBadge()
 setInterval(refreshUnreadBadge, 30000)
+
+
+function enableDashboardFilters() {
+  const controls = Array.from(document.querySelectorAll('[data-dashboard-filter]'))
+  const cards = Array.from(document.querySelectorAll('[data-announcement-status]'))
+  const result = document.querySelector('[data-dashboard-result]')
+  const clear = document.querySelector('[data-dashboard-clear]')
+  const empty = document.querySelector('[data-dashboard-filter-empty]')
+  if (!controls.length || !cards.length) return
+
+  const labels = {
+    all: '顯示全部公告',
+    published: '顯示已發布公告',
+    unread: '顯示尚未閱讀公告',
+    pending: '顯示待發布更新',
+  }
+
+  function matchesFilter(card, filter) {
+    if (filter === 'all') return true
+    if (filter === 'published') return card.dataset.announcementStatus === 'published'
+    if (filter === 'unread') return card.dataset.announcementUnread === 'true'
+    if (filter === 'pending') return card.dataset.announcementPending === 'true'
+    return true
+  }
+
+  function applyFilter(filter) {
+    let visibleCount = 0
+    controls.forEach((control) => {
+      const active = control.dataset.dashboardFilter === filter
+      control.classList.toggle('is-active', active)
+      control.setAttribute('aria-pressed', active ? 'true' : 'false')
+    })
+    cards.forEach((card) => {
+      const visible = matchesFilter(card, filter)
+      card.hidden = !visible
+      card.classList.toggle('is-filtered-out', !visible)
+      if (visible) visibleCount += 1
+    })
+    if (result) result.textContent = `${labels[filter] || labels.all} · ${visibleCount} 則`
+    if (clear) clear.hidden = filter === 'all'
+    if (empty) empty.hidden = visibleCount !== 0
+  }
+
+  controls.forEach((control) => {
+    control.addEventListener('click', () => applyFilter(control.dataset.dashboardFilter || 'all'))
+  })
+  clear?.addEventListener('click', () => applyFilter('all'))
+  applyFilter('all')
+}
+
+enableDashboardFilters()
