@@ -149,3 +149,114 @@ function enableDashboardFilters() {
 }
 
 enableDashboardFilters()
+
+// Explicit, version-aware read receipts. A page GET alone must never mark content read.
+function initNoticeReadTracking() {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || ''
+  if (!csrf) return
+  document.querySelectorAll('[data-read-container][data-can-read="true"]').forEach((root) => {
+    const accordion = root.querySelector('[data-notice-accordion]')
+    const panel = root.querySelector('[data-notice-content]')
+    const detail = root.querySelector('[data-notice-detail-content]')
+    const content = panel || detail
+    const viewer = root.querySelector('[data-tiptap-viewer]')
+    const confirmation = root.querySelector('[data-confirm-pdf-read]')
+    const hint = root.querySelector('[data-read-hint]')
+    if (!content || !viewer) return
+    let submitting = false
+    let confirmed = root.dataset.hasRead === 'true'
+
+    const updateReadUI = (response) => {
+      root.dataset.hasRead = 'true'
+      if (hint) hint.textContent = '本版已讀'
+      const badge = root.querySelector('[data-read-label]')
+      if (badge) {
+        badge.textContent = '本版已讀'
+        badge.classList.remove('unread')
+        badge.classList.add('read')
+      }
+      root.querySelectorAll('[data-read-count]').forEach((el) => { el.textContent = String(response.read_count) })
+      const list = root.querySelector('[data-reader-list]')
+      if (list && list.tagName === 'UL') {
+        list.querySelector('[data-read-empty]')?.remove()
+        const name = response.reader.username
+        if (![...list.querySelectorAll('[data-reader-username]')].some((el) => el.dataset.readerUsername === name)) {
+          const li = document.createElement('li')
+          li.dataset.readerUsername = name
+          const strong = document.createElement('strong')
+          strong.textContent = response.reader.display_name
+          const sub = document.createElement('span')
+          sub.className = 'muted'
+          sub.textContent = ' @' + name
+          li.append(strong, sub)
+          list.append(li)
+        }
+      }
+      root.dataset.announcementUnread = 'false'
+      root.classList.remove('is-unread')
+      const unreadStat = document.querySelector('.summary-card-unread > strong')
+      if (unreadStat) unreadStat.textContent = String(Math.max(0, Number(unreadStat.textContent || 0) - 1))
+      refreshUnreadBadge()
+    }
+    const isAtBottom = () => {
+      if (panel) {
+        // Only the expanded card can qualify. No scrollbar means expansion is enough.
+        if (!accordion?.open) return false
+        return panel.scrollHeight <= panel.clientHeight + 3 ||
+          panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 10
+      }
+      // A full-page announcement qualifies when the end of the content becomes visible.
+      const rect = content.getBoundingClientRect()
+      return rect.bottom <= window.innerHeight - 8 && rect.bottom > 0
+    }
+    const maybeMarkRead = async (pdfConfirmed = false) => {
+      if (confirmed || submitting || document.visibilityState !== 'visible') return
+      if (viewer.dataset.rendered !== 'true' || !isAtBottom()) return
+      // Embedded PDF viewers have their own independent scrollbar. Never infer full
+      // PDF reading from a parent scroll event; require an explicit acknowledgment.
+      if (viewer.querySelector('iframe.pdf-frame') && !pdfConfirmed) {
+        if (confirmation) confirmation.hidden = false
+        if (hint) hint.textContent = '內嵌 PDF 無法自動辨識閱讀進度，閱讀完後請點選確認。'
+        return
+      }
+      submitting = true
+      try {
+        const response = await fetch(appUrl('/api/announcements/' + encodeURIComponent(root.dataset.announcementId) + '/read'), {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ csrf_token: csrf, version: root.dataset.version }),
+        })
+        if (!response.ok) throw new Error('HTTP ' + response.status)
+        confirmed = true
+        if (confirmation) confirmation.hidden = true
+        updateReadUI(await response.json())
+      } catch {
+        if (hint) hint.textContent = '已閱紀錄尚未成功儲存；請確認網路後再試一次。'
+      } finally {
+        submitting = false
+      }
+    }
+
+    if (confirmed) {
+      if (hint) hint.textContent = '本版已讀'
+      return
+    }
+    accordion?.addEventListener('toggle', () => {
+      if (accordion.open) window.requestAnimationFrame(() => maybeMarkRead())
+    })
+    panel?.addEventListener('scroll', () => maybeMarkRead(), { passive: true })
+    if (detail) window.addEventListener('scroll', () => maybeMarkRead(), { passive: true })
+    confirmation?.addEventListener('click', () => maybeMarkRead(true))
+    viewer.addEventListener('noticeboard:viewer-ready', () => window.requestAnimationFrame(() => maybeMarkRead()))
+    // Watch for viewport changes and rich-content hydration, not merely a click.
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => maybeMarkRead())
+      observer.observe(content)
+    }
+    window.addEventListener('resize', () => maybeMarkRead(), { passive: true })
+    window.requestAnimationFrame(() => maybeMarkRead())
+  })
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initNoticeReadTracking)
+else initNoticeReadTracking()
