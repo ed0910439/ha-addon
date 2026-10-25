@@ -28,27 +28,41 @@
       <label>重要性<select name="importance">{% for code, label in IMPORTANCE_LABELS.items() %}<option value="{{ code }}" {% if code == chosen_importance %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 
       <div class="tiptap-shell" data-tiptap-editor>
-        <span class="field-label">內容</span>
+        <div class="editor-header-row">
+          <span class="field-label">內容</span>
+          <label class="markdown-mode-switch" title="開啟以編輯 Markdown 原始碼；關閉回到視覺化編輯器">
+            <span>MD 排版</span>
+            <input type="checkbox" role="switch" data-markdown-toggle aria-label="使用 Markdown 排版">
+            <span class="markdown-toggle-track" aria-hidden="true"></span>
+          </label>
+        </div>
         <div class="editor-toolbar" data-editor-toolbar aria-label="文字格式工具列">
-          <button type="button" class="tool-btn" data-command="bold"><strong>B</strong></button>
-          <button type="button" class="tool-btn" data-command="italic"><em>I</em></button>
-          <button type="button" class="tool-btn" data-command="strike"><s>S</s></button>
-          <button type="button" class="tool-btn" data-command="heading2">H2</button>
-          <button type="button" class="tool-btn" data-command="heading3">H3</button>
-          <button type="button" class="tool-btn" data-command="bulletList">• 清單</button>
-          <button type="button" class="tool-btn" data-command="orderedList">1. 清單</button>
-          <button type="button" class="tool-btn" data-command="blockquote">引用</button>
-          <button type="button" class="tool-btn" data-command="horizontalRule">分隔線</button>
-          <button type="button" class="tool-btn" data-command="undo">復原</button>
-          <button type="button" class="tool-btn" data-command="redo">重做</button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="bold" title="粗體" aria-label="粗體" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 12h8a4 4 0 0 1 0 8H6z"/><path d="M6 4h7a4 4 0 0 1 0 8H6z"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="italic" title="斜體" aria-label="斜體" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 4h-9M14 20H5M15 4 9 20"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="strike" title="刪除線" aria-label="刪除線" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16M16 5a5 5 0 0 0-8.5 2.5M8 17a5 5 0 0 0 8 0"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="heading2" title="二級標題" aria-label="二級標題" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5v14M13 5v14M4 12h9"/><path d="M17 15a2 2 0 1 1 4 0c0 2-4 2.5-4 5h4"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="heading3" title="三級標題" aria-label="三級標題" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14M12 5v14M3 12h9"/><path d="M17 14h3a2 2 0 1 1 0 4h-3M17 10h3a2 2 0 1 1 0 4"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="bulletList" title="項目清單" aria-label="項目清單" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r=".9" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r=".9" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r=".9" fill="currentColor" stroke="none"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="orderedList" title="編號清單" aria-label="編號清單" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 6h11M10 12h11M10 18h11M4 4v5M3 5l1-1M3 15h4l-3 3h3M3 12a2 2 0 0 1 4 0c0 1-4 2-4 3"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="blockquote" title="引言" aria-label="引言" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21c4-4 6-10 6-15H3v7h5M14 21c4-4 6-10 6-15h-6v7h5"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="horizontalRule" title="分隔線" aria-label="分隔線" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="undo" title="復原" aria-label="復原" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
+          <button type="button" class="tool-btn tool-icon-btn" data-command="redo" title="重做" aria-label="重做" aria-pressed="false"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5m5 5H10a6 6 0 0 0 0 12h2"/></svg></button>
           <span class="toolbar-spacer"></span>
-          <button type="button" class="tool-btn pdf-tool" data-upload-pdf>加入 PDF</button>
+          <button type="button" class="tool-btn pdf-tool" data-upload-pdf title="加入 PDF 附件" aria-label="加入 PDF 附件"><svg class="editor-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 15h8M8 18h6"/></svg></button>
           <input data-pdf-input type="file" accept="application/pdf,.pdf" hidden>
         </div>
         <div class="editor-mount" data-editor-mount></div>
+        <div class="markdown-source-panel" data-markdown-panel hidden>
+          <label for="notice-markdown-source" class="field-label">Markdown 原始碼</label>
+          <textarea id="notice-markdown-source" data-markdown-source rows="18" spellcheck="false"
+             placeholder="# 公告標題&#10;&#10;使用 **粗體**、*斜體*、清單或引言來排版。"></textarea>
+          <p class="small muted">關閉「MD 排版」即可檢視結果。切換時保留原本的 PDF 附件；若有不支援的語法，請以視覺化預覽為準。</p>
+        </div>
+        <div class="alert danger markdown-error" data-markdown-error role="alert" hidden></div>
         <textarea name="body" rows="18" maxlength="50000" class="richtext-fallback">{{ edit_body }}</textarea>
         <textarea name="body_json" class="sr-only" tabindex="-1" aria-hidden="true"></textarea>
-        <div class="small muted upload-status" data-upload-status>PDF：10 頁以內上傳後可選擇直接顯示或附檔；11 頁起強制作為附檔。</div>
+        <div class="small muted upload-status" data-upload-status>PDF：10 頁以內可直接顯示或作為附檔；11 頁起強制作為附檔。切換至 MD 模式時暫停新增附件。</div>
       </div>
       <script type="application/json" id="editor-initial-content">{{ editor_doc|tojson }}</script>
 
