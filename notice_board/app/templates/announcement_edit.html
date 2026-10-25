@@ -24,6 +24,8 @@
       {% set edit_title = announcement.draft_title if announcement and announcement.has_unpublished_changes else (announcement.title if announcement else '') %}
       {% set edit_body = announcement.draft_body if announcement and announcement.has_unpublished_changes else (announcement.body if announcement else '') %}
       <label>標題<input name="title" maxlength="180" value="{{ edit_title }}" required></label>
+      {% set chosen_importance = announcement.draft_importance if announcement and announcement.has_unpublished_changes and announcement.draft_importance else (announcement.importance if announcement and announcement.importance else 'NORMAL') %}
+      <label>重要性<select name="importance">{% for code, label in IMPORTANCE_LABELS.items() %}<option value="{{ code }}" {% if code == chosen_importance %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 
       <div class="tiptap-shell" data-tiptap-editor>
         <span class="field-label">內容</span>
