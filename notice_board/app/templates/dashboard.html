@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}公告總覽{% endblock %}
+{% block scripts %}<script type="module" src="{{ base_path }}/static/editor.js"></script>{% endblock %}
 {% block content %}
 <section class="dashboard-shell">
   <div class="dashboard-topline">
@@ -50,33 +51,49 @@
   </div>
 
   {% if announcements %}
-  <div class="announcement-grid dashboard-announcement-grid pro-card-grid">
+  <div class="notice-list dashboard-announcement-grid" aria-label="最新公告">
     {% for a in announcements %}
-    {% set display_title = a.title %}
-    {% set display_body = a.body %}
-    <article class="card pro-card ann-card dashboard-ann-card status-{{ a.status|lower }}{% if not a.has_read_current and a.status == 'PUBLISHED' %} is-unread{% endif %}{% if a.has_unpublished_changes %} is-pending{% endif %}" data-announcement-status="{{ a.status|lower }}" data-announcement-unread="{{ 'true' if not a.has_read_current and a.status == 'PUBLISHED' else 'false' }}" data-announcement-pending="{{ 'true' if a.has_unpublished_changes else 'false' }}">
-      <div class="announcement-card-head">
-        <div class="announcement-state"><span class="state-dot"></span>{{ ANNOUNCEMENT_STATE_LABELS[a.status] }}</div>
-        {% if a.has_unpublished_changes %}<span class="card-note">待發布更新</span>{% endif %}
-        <time class="announcement-date" datetime="{{ a.published_at or a.updated_at }}">{{ a.published_at|fmt_dt if a.published_at else '尚未發布' }}</time>
-      </div>
-      <h3>{{ display_title }}</h3>
-      <p class="preview">{{ display_body|truncate(170) }}</p>
-      <div class="announcement-card-footer">
-        <div class="announcement-author">
-          <span class="author-avatar">{{ a.author_name[:1] }}</span>
-          <span>{{ a.author_name }}{% if a.current_version %}<small>{{ a.read_count }} 人已閱讀</small>{% endif %}</span>
-        </div>
-        <div class="announcement-actions">
-          {% if a.status == 'PUBLISHED' %}<a class="btn btn-compact" href="{{ base_path }}/a/{{ a.slug }}">閱讀公告</a>{% endif %}
-          {% if a.can_edit %}<a class="btn btn-compact" href="{{ base_path }}/manage/announcements/{{ a.id }}/edit">管理</a>{% endif %}
-          {% if a.can_withdraw %}
-          <form method="post" action="{{ base_path }}/manage/announcements/{{ a.id }}/withdraw" data-confirm="確定要撤下這則公告？">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline btn-compact" type="submit">撤下</button>
-          </form>
+    <article class="card pro-card dashboard-ann-card notice-list-item status-{{ a.status|lower }}{% if not a.has_read_current %} is-unread{% endif %}{% if a.has_unpublished_changes %} is-pending{% endif %}"
+      data-announcement-status="{{ a.status|lower }}"
+      data-announcement-unread="{{ 'false' if a.has_read_current else 'true' }}"
+      data-announcement-pending="{{ 'true' if a.has_unpublished_changes else 'false' }}"
+      data-read-container data-announcement-id="{{ a.id }}" data-version="{{ a.current_version }}"
+      data-can-read="{{ 'true' if user.role != 'BOT' else 'false' }}"
+      data-has-read="{{ 'true' if a.has_read_current else 'false' }}">
+      <details class="notice-accordion" data-notice-accordion>
+        <summary class="notice-summary">
+          <span class="notice-chevron" aria-hidden="true"></span>
+          <span class="notice-importance importance-{{ a.importance|default('NORMAL')|lower }}">{{ IMPORTANCE_LABELS.get(a.importance|default('NORMAL'), '一般') }}</span>
+          <strong class="notice-heading">{{ a.title }}</strong>
+          <span class="notice-author">{{ a.author_name }}</span>
+          {% if a.has_unpublished_changes %}<span class="badge pending">待發布更新</span>{% endif %}
+          {% if user.role != 'BOT' %}<span class="badge {{ 'read' if a.has_read_current else 'unread' }}" data-read-label>{{ '本版已讀' if a.has_read_current else '新版未讀' }}</span>{% endif %}
+        </summary>
+        <div class="notice-expanded">
+          <div class="notice-scroll-content" data-notice-content aria-label="公告內文">
+            <div class="tiptap-viewer notice-rich-content" data-tiptap-viewer data-content-script="dashboard-content-{{ a.id }}"></div>
+            <script type="application/json" id="dashboard-content-{{ a.id }}">{{ a.body_doc|tojson }}</script>
+          </div>
+          {% if user.role != 'BOT' %}
+          <div class="notice-reading-note" data-read-hint>內文完整顯示或捲到底部後會記錄本版已閱。</div>
+          <button type="button" class="btn small-btn notice-pdf-confirm" data-confirm-pdf-read hidden>已閱讀內嵌 PDF，確認已閱</button>
           {% endif %}
+          <div class="row gap wrap notice-item-actions">
+            <a class="btn btn-compact" href="{{ base_path }}/a/{{ a.slug }}">開啟完整頁面</a>
+            {% if a.can_edit %}<a class="btn btn-compact" href="{{ base_path }}/manage/announcements/{{ a.id }}/edit">管理</a>{% endif %}
+            {% if a.can_withdraw %}<form method="post" action="{{ base_path }}/manage/announcements/{{ a.id }}/withdraw" data-confirm="確定要撤下這則公告？"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger-outline btn-compact" type="submit">撤下</button></form>{% endif %}
+          </div>
         </div>
-      </div>
+      </details>
+      <footer class="notice-footer">
+        <span class="notice-date">{{ a.published_at|fmt_dt }}{% if a.expires_at %} ～ {{ a.expires_at|fmt_dt }}{% endif %}</span>
+        <details class="notice-readers">
+          <summary>已閱名單 · <span data-read-count>{{ a.read_count }}</span> 人</summary>
+          <ul data-reader-list>
+            {% for r in a.reads %}<li data-reader-username="{{ r.username }}"><strong>{{ r.display_name }}</strong> <span class="muted">@{{ r.username }}</span></li>{% else %}<li data-read-empty class="muted">尚無已閱者</li>{% endfor %}
+          </ul>
+        </details>
+      </footer>
     </article>
     {% endfor %}
   </div>

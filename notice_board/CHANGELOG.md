@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.6.1
+
+- 保留 2.6.0 公告總覽摘要卡與篩選，將下方列表更新為可展開公告；頁首顯示重要性、標題、發布者，頁腳顯示發布／到期時間與已閱名單。
+- 一般短文展開後自動記錄已閱；長文捲到底或完整公告頁捲到結尾才記錄；嵌入 PDF 需明確確認，避免誤計。
+- 依公告版本記錄已閱，單純 GET 不再自動計入；新版發布後獨立重計。
+- 公告編輯器加入重要性與草稿保護欄位，既有 SQLite 記錄原樣保留。
+- 增加外掛內的 Home Assistant 管理員選擇設定，從 Supervisor WebSocket 驗證當前管理員身分，保留本地帳戶作為復原入口。
+
+
 ## 2.6.0
 
 **Manus AI 更新 — 2026-10-21.** Minor release: new dashboard interactions and settings features; existing authentication and announcement endpoints are retained.

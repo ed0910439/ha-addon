@@ -1,5 +1,5 @@
 name: Notice Board
-version: "2.6.0"
+version: "2.6.1"
 slug: notice_board
 description: "Internal announcement board with rich text, PDF attachments, read receipts, and Home Assistant notifications."
 url: "https://github.com/ed0910439/ha-addon/tree/master/notice_board"

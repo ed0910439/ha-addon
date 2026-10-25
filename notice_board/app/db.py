@@ -134,6 +134,10 @@ def _migrate_legacy_schema() -> None:
                 c.execute("ALTER TABLE announcements ADD COLUMN body_json TEXT")
             if "draft_body_json" not in ann_cols:
                 c.execute("ALTER TABLE announcements ADD COLUMN draft_body_json TEXT")
+            if "importance" not in ann_cols:
+                c.execute("ALTER TABLE announcements ADD COLUMN importance TEXT NOT NULL DEFAULT 'NORMAL'")
+            if "draft_importance" not in ann_cols:
+                c.execute("ALTER TABLE announcements ADD COLUMN draft_importance TEXT")
 
         if _table_sql(c, "announcement_revisions"):
             rev_cols = _columns(c, "announcement_revisions")
@@ -205,6 +209,8 @@ def init_db() -> None:
                 body_json TEXT,
                 status TEXT NOT NULL CHECK(status IN ('DRAFT','PUBLISHED','WITHDRAWN','EXPIRED')),
                 current_version INTEGER NOT NULL DEFAULT 0,
+                importance TEXT NOT NULL DEFAULT 'NORMAL',
+                draft_importance TEXT,
                 draft_title TEXT,
                 draft_body TEXT,
                 draft_body_json TEXT,

@@ -2,6 +2,10 @@ name: Build Notice Board GHCR image
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "notice_board/**"
+      - ".github/workflows/notice-board-ghcr.yml"
   push:
     branches:
       - master
@@ -14,6 +18,19 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: pip install -r notice_board/requirements.txt httpx
+      - name: Run release regression suite
+        working-directory: notice_board
+        run: python -m unittest discover -s tests -v
+
   version:
     runs-on: ubuntu-latest
     outputs:
@@ -29,7 +46,8 @@ jobs:
           echo "value=$value" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: version
+    if: github.event_name != 'pull_request'
+    needs: [version, test]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

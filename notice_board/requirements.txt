@@ -6,3 +6,4 @@ qrcode[pil]>=7.4,<9
 cryptography>=43,<47
 tzdata>=2026.1
 pypdf>=5.9,<7
+websockets>=13,<17
