@@ -329,6 +329,8 @@ function initViewers() {
       editable: false,
       editorProps: { attributes: { class: 'tiptap-prosemirror tiptap-readonly' } },
     })
+    element.dataset.rendered = 'true'
+    element.dispatchEvent(new CustomEvent('noticeboard:viewer-ready', { bubbles: true }))
   })
 }
 
