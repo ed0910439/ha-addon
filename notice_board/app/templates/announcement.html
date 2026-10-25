@@ -2,7 +2,7 @@
 {% block title %}{{ announcement.title }}{% endblock %}
 {% block scripts %}<script type="module" src="{{ base_path }}/static/editor.js"></script>{% endblock %}
 {% block content %}
-<article class="card notice-view">
+<article class="card notice-view" data-read-container data-announcement-id="{{ announcement.id }}" data-version="{{ announcement.current_version }}" data-has-read="{{ 'true' if reads|selectattr('id', 'equalto', user.id)|list|length > 0 else 'false' }}" data-can-read="{{ 'true' if announcement.status == 'PUBLISHED' and user.role != 'BOT' else 'false' }}">
   <div class="row between wrap gap">
     <div class="row gap wrap">
       <span class="badge {{ announcement.status|lower }}">{{ ANNOUNCEMENT_STATE_LABELS[announcement.status] if announcement.status in ANNOUNCEMENT_STATE_LABELS else announcement.status }}</span>
@@ -37,15 +37,19 @@
   </section>
   {% endif %}
 
-  <section class="current-content">
+  <section class="current-content" data-notice-detail-content>
     {% if comparison and comparison.body_changed %}<div class="small muted current-content-label">目前完整內容</div>{% endif %}
     <div class="tiptap-viewer notice-body" data-tiptap-viewer data-content-script="announcement-current-content">{{ announcement.body }}</div>
     <script type="application/json" id="announcement-current-content">{{ announcement.body_doc|tojson }}</script>
   </section>
 
+  {% if announcement.status == 'PUBLISHED' and user.role != 'BOT' %}
+  <div class="notice-reading-note" data-read-hint>閱讀完整內容後，自動記錄本版已閱。</div>
+  <button type="button" class="btn small-btn notice-pdf-confirm" data-confirm-pdf-read hidden>已閱讀內嵌 PDF，確認已閱</button>
+  {% endif %}
   {% if announcement.status == 'PUBLISHED' %}
   <section class="read-section">
-    <h3>已經看過 <span class="count">本版 {{ reads|length }} 人</span></h3>
+    <h3>已經看過 <span class="count">本版 <span data-read-count>{{ reads|length }}</span> 人</span></h3>
     <p class="small muted">每次發布新版本都會重新計算；舊版本的已閱紀錄仍保留在版本紀錄中。</p>
     <div class="avatar-row">
       {% for r in reads %}
