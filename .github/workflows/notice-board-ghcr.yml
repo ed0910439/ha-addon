@@ -27,6 +27,10 @@ jobs:
           python-version: "3.12"
       - name: Install test dependencies
         run: pip install -r notice_board/requirements.txt httpx
+      - name: Check JavaScript module syntax
+        run: |
+          node --input-type=module --check < notice_board/app/static/editor.js
+          node --input-type=module --check < notice_board/app/static/app.js
       - name: Run release regression suite
         working-directory: notice_board
         run: python -m unittest discover -s tests -v
