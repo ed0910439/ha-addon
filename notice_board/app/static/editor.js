@@ -59,7 +59,7 @@ const PdfAttachment = Node.create({
     const id = node.attrs?.fileId || ''
     const mode = node.attrs?.displayMode === 'inline' ? 'inline' : 'attachment'
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('PDF 附件 ID 無法安全轉換成 Markdown。')
-    return ':::notice-pdf[' + id + '|' + mode + ']\\n\\n'
+    return ':::notice-pdf[' + id + '|' + mode + ']\n\n'
   },
   name: 'pdfAttachment',
   group: 'block',
@@ -314,7 +314,7 @@ function initEditor() {
     const markdown = markdownSource?.value || ''
     if (markdown.length > 50000) throw new Error('Markdown 內容不得超過 50,000 字。')
     // Never silently discard file nodes because a user typed an unknown file ID.
-    const tokens = [...markdown.matchAll(/:::notice-pdf\\[([^\\]\\n]+)\\]/g)]
+    const tokens = [...markdown.matchAll(/:::notice-pdf\[([^\]\r\n]+)\]/g)]
     for (const match of tokens) {
       const parts = match[1].split('|')
       if (parts.length !== 2 || !pdfNodeCache.has(parts[0]) || !['inline', 'attachment'].includes(parts[1])) {
