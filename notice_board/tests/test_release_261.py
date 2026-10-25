@@ -33,7 +33,7 @@ class Notice261Tests(unittest.TestCase):
                       ("d1", "u1", "test-device", token_hash("alice-cookie"), now, now, expires))
             c.execute("INSERT INTO announcements (id,slug,title,body,status,current_version,created_by,updated_by,created_at,updated_at,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                       ("a1", "release-261", "公告標題", "公告完整內文", "PUBLISHED", 1, "u1", "u1", now, now, now))
-        self.client = TestClient(main.app, follow_redirects=False)
+        self.client = TestClient(main.app, base_url="https://testserver", follow_redirects=False)
         self.addCleanup(self.client.close)
         self.client.cookies.set(main.DEVICE_COOKIE, "alice-cookie")
         self.client.get("/")
