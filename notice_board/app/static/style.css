@@ -722,3 +722,25 @@ textarea { resize: vertical; }
 .notice-readers li+li{margin-top:6px}
 .notice-view .notice-reading-note{margin:12px 0}
 @media(max-width:780px){.notice-summary{grid-template-columns:16px 62px minmax(0,1fr) minmax(55px,auto);gap:8px;padding:12px}.notice-author{font-size:.73rem}.notice-expanded{padding:0 12px 12px}.notice-footer{padding:9px 12px;font-size:.77rem}.notice-readers>ul{max-width:92vw}}
+
+
+/* Icon-formatting toolbar and opt-in Markdown source mode (2.6.2). */
+.editor-header-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 10px}
+.editor-header-row>.field-label{font-weight:700;color:var(--text)}
+.tool-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:7px;line-height:1}
+.editor-icon{display:block;flex:none;pointer-events:none}
+.tool-btn[disabled]{opacity:.42;cursor:not-allowed}
+.tool-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.markdown-mode-switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none;font-weight:650;position:relative}
+.markdown-mode-switch input{position:absolute;opacity:0;width:1px;height:1px;padding:0;margin:0}
+.markdown-toggle-track{display:inline-block;width:42px;height:24px;border-radius:20px;background:#b6c8cf;border:1px solid #99b0ba;position:relative;transition:background .2s}
+.markdown-toggle-track::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 4px #0002;transition:transform .2s}
+.markdown-mode-switch input:checked+.markdown-toggle-track{background:var(--brand);border-color:var(--brand)}
+.markdown-mode-switch input:checked+.markdown-toggle-track::after{transform:translateX(18px)}
+.markdown-mode-switch input:focus-visible+.markdown-toggle-track{outline:3px solid #90ccd4;outline-offset:2px}
+.markdown-source-panel{border:1px solid var(--line-strong);border-radius:0 0 12px 12px;background:var(--panel-soft);padding:14px}
+.markdown-source-panel label{margin-bottom:9px}
+.markdown-source-panel textarea{min-height:330px;width:100%;font:500 .91rem/1.65 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;tab-size:2;resize:vertical;white-space:pre;overflow-wrap:normal}
+.markdown-source-panel p{margin-bottom:0}
+.markdown-error{margin:9px 0}
+@media(max-width:600px){.editor-toolbar{gap:5px;padding:6px}.tool-icon-btn{width:36px;height:36px}.editor-header-row{align-items:center}.markdown-source-panel{padding:9px}}
