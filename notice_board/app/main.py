@@ -27,6 +27,7 @@ from pypdf import PdfReader
 from .content import attachment_ids, dump_doc, legacy_text_doc, load_doc, sanitize_doc
 
 from .db import audit, conn, init_db, now_iso
+from .ha_admin import HAAdminDirectoryUnavailable, list_ha_administrators, ha_user_is_current_admin, reset_admin_cache
 from .security import (
     decrypt_secret,
     encrypt_secret,
@@ -66,6 +67,7 @@ ACCOUNT_LEVEL_LABELS = {
     "USER": "一般使用者",
     "BOT": "機器人",
 }
+IMPORTANCE_LABELS = {"NORMAL": "一般", "IMPORTANT": "重要", "URGENT": "緊急"}
 ANNOUNCEMENT_STATE_LABELS = {
     "DRAFT": "草稿",
     "PUBLISHED": "已發布",
@@ -94,6 +96,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.globals["ACCOUNT_LEVEL_LABELS"] = ACCOUNT_LEVEL_LABELS
 templates.env.globals["ANNOUNCEMENT_STATE_LABELS"] = ANNOUNCEMENT_STATE_LABELS
+templates.env.globals["IMPORTANCE_LABELS"] = IMPORTANCE_LABELS
 
 
 def fmt_dt(value: str | None) -> str:
@@ -288,6 +291,8 @@ def ingress_user(request: Request):
         if existing:
             if not existing["is_active"]:
                 return None
+            if existing["role"] == "SYSADMIN" and not ha_user_is_current_admin(hass_user_id):
+                return None
             result = dict(existing)
             result.update({"device_id": None, "device_name": "Home Assistant Ingress", "auth_source": "INGRESS"})
             return result
@@ -295,7 +300,7 @@ def ingress_user(request: Request):
         match = None
         if hass_username:
             match = c.execute(
-                "SELECT * FROM users WHERE username=? COLLATE NOCASE AND hass_user_id IS NULL AND role!='BOT' AND is_active=1",
+                "SELECT * FROM users WHERE username=? COLLATE NOCASE AND hass_user_id IS NULL AND role='USER' AND is_active=1",
                 (hass_username,),
             ).fetchone()
         if match:
@@ -796,15 +801,16 @@ def _publish_in_connection(c, ann, actor_user_id: str, automated: bool = False) 
         body = ann["body"]
         body_json = ann["body_json"] or dump_doc(legacy_text_doc(body))
 
+    importance = (ann.get("draft_importance") if ann["has_unpublished_changes"] else None) or ann["importance"]
     new_version = int(ann["current_version"] or 0) + 1
     t = now_iso()
     c.execute(
         """
-        UPDATE announcements SET title=?,body=?,body_json=?,status='PUBLISHED',current_version=?,draft_title=NULL,draft_body=NULL,draft_body_json=NULL,
+        UPDATE announcements SET title=?,body=?,body_json=?,importance=?,status='PUBLISHED',current_version=?,draft_title=NULL,draft_body=NULL,draft_body_json=NULL,draft_importance=NULL,
         has_unpublished_changes=0,scheduled_publish_at=NULL,published_at=?,withdrawn_at=NULL,expired_at=NULL,
         updated_by=?,updated_at=? WHERE id=?
         """,
-        (title, body, body_json, new_version, t, actor_user_id, t, ann["id"]),
+        (title, body, body_json, importance, new_version, t, actor_user_id, t, ann["id"]),
     )
     c.execute(
         """INSERT INTO announcement_revisions
@@ -1042,9 +1048,27 @@ def dashboard(request: Request):
             """,
             (user["id"],),
         ).fetchall()
+    reads_by_announcement = {}
+    if rows:
+        with conn() as c:
+            ids = [r["id"] for r in rows]
+            placeholders = ",".join("?" for _ in ids)
+            receipts = c.execute(
+                f"""SELECT r.announcement_id,r.first_seen_at,u.display_name,u.username,u.avatar_url
+                    FROM announcement_reads_v2 r
+                    JOIN announcements a ON a.id=r.announcement_id AND a.current_version=r.version_no
+                    JOIN users u ON u.id=r.user_id
+                    WHERE r.announcement_id IN ({placeholders}) AND a.status='PUBLISHED'
+                    ORDER BY r.first_seen_at""", ids,
+            ).fetchall()
+            for receipt in receipts:
+                item = dict(receipt)
+                reads_by_announcement.setdefault(item["announcement_id"], []).append(item)
     anns = []
     for r in rows:
         d = dict(r) | {"url": announcement_url(request, r["slug"])}
+        d["reads"] = reads_by_announcement.get(r["id"], [])
+        d["body_doc"] = load_doc(d.get("body_json"), d.get("body", ""))
         d["context_label"] = announcement_context(user, d)
         d["can_edit"] = can_edit(user, d)
         d["can_withdraw"] = can_withdraw(user, d)
@@ -1071,6 +1095,33 @@ def dashboard(request: Request):
 def unread_count_api(request: Request):
     user = require_user(request, "/")
     return {"unread_count": unread_count_for_user(user)}
+
+
+@app.post("/api/announcements/{announcement_id}/read")
+def mark_announcement_read(request: Request, announcement_id: str, version: int = Form(...), csrf_token: str = Form(...)):
+    """A short expanded card or a fully scrolled document can create a read receipt."""
+    require_csrf(request, csrf_token)
+    user = require_user(request)
+    if user["role"] == "BOT":
+        raise HTTPException(403, "機器人不能產生已閱紀錄")
+    with conn() as c:
+        ann = c.execute(
+            "SELECT id,current_version,status FROM announcements WHERE id=? AND deleted_at IS NULL",
+            (announcement_id,),
+        ).fetchone()
+        if not ann or ann["status"] != "PUBLISHED":
+            raise HTTPException(404, "公告不存在")
+        if int(ann["current_version"]) != version:
+            raise HTTPException(409, "公告已更新，請重新讀取新版")
+        c.execute(
+            "INSERT OR IGNORE INTO announcement_reads_v2 (announcement_id,version_no,user_id,first_seen_at) VALUES (?,?,?,?)",
+            (ann["id"], version, user["id"], now_iso()),
+        )
+        count = c.execute(
+            "SELECT COUNT(*) AS n FROM announcement_reads_v2 WHERE announcement_id=? AND version_no=?",
+            (ann["id"], version),
+        ).fetchone()["n"]
+    return {"ok": True, "read_count": count, "reader": {"display_name": user["display_name"], "username": user["username"]}}
 
 
 @app.get("/a/{slug}", response_class=HTMLResponse)
@@ -1117,10 +1168,6 @@ def announcement_view(request: Request, slug: str):
                         "body_changed": any(seg["kind"] != "same" for seg in body_segments),
                         "rich_changed": (previous_revision["body_json"] or "") != (ann["body_json"] or ""),
                     }
-            c.execute(
-                "INSERT OR IGNORE INTO announcement_reads_v2 (announcement_id,version_no,user_id,first_seen_at) VALUES (?,?,?,?)",
-                (ann["id"], ann["current_version"], user["id"], now_iso()),
-            )
         reads = c.execute(
             """
             SELECT r.first_seen_at, u.id, u.username, u.display_name, u.avatar_url
@@ -1308,6 +1355,7 @@ def announcement_new_action(
     body: str = Form(""),
     body_json: str = Form(""),
     upload_session: str = Form(""),
+    importance: str = Form("NORMAL"),
     scheduled_publish_at: str = Form(""),
     expires_at: str = Form(""),
     publish_now: str = Form(""),
@@ -1324,15 +1372,17 @@ def announcement_new_action(
     expires = local_form_to_utc(expires_at)
     published_version = None
     try:
+        if importance not in IMPORTANCE_LABELS:
+            raise ValueError("公告重要性無效")
         with conn() as c:
             doc, text = _submission_doc(c, user, body_json, body, None, upload_session)
             if not title or not text:
                 raise ValueError("標題與內容不可空白")
             c.execute(
                 """INSERT INTO announcements
-                (id,slug,title,body,body_json,status,current_version,scheduled_publish_at,expires_at,created_by,updated_by,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (aid, slug, title, text, dump_doc(doc), "DRAFT", 0, scheduled, expires, user["id"], user["id"], t, t),
+                (id,slug,title,body,body_json,importance,status,current_version,scheduled_publish_at,expires_at,created_by,updated_by,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (aid, slug, title, text, dump_doc(doc), importance, "DRAFT", 0, scheduled, expires, user["id"], user["id"], t, t),
             )
             _bind_pending_attachments(c, aid, user["id"], upload_session, doc)
             if publish_now:
@@ -1345,7 +1395,7 @@ def announcement_new_action(
             submitted_doc = load_doc(body_json, body)
         except Exception:
             submitted_doc = legacy_text_doc(body)
-        return render(request, "announcement_edit.html", announcement={"title": title, "body": body}, revisions=[], error=str(exc), active_bot=None, can_edit=True, can_publish=True, can_withdraw=False, can_delete=False, editor_doc=submitted_doc, upload_session=upload_session or token())
+        return render(request, "announcement_edit.html", announcement={"title": title, "body": body, "importance": importance}, revisions=[], error=str(exc), active_bot=None, can_edit=True, can_publish=True, can_withdraw=False, can_delete=False, editor_doc=submitted_doc, upload_session=upload_session or token())
     audit(user["id"], "announcement.create_draft", "announcement", aid, {"scheduled_publish_at": scheduled, "expires_at": expires})
     if published_version is not None:
         audit(user["id"], "announcement.publish", "announcement", aid, {"version": published_version})
@@ -1388,6 +1438,7 @@ def announcement_edit_action(
     body: str = Form(""),
     body_json: str = Form(""),
     upload_session: str = Form(""),
+    importance: str = Form("NORMAL"),
     scheduled_publish_at: str = Form(""),
     expires_at: str = Form(""),
     publish_now: str = Form(""),
@@ -1403,6 +1454,8 @@ def announcement_edit_action(
         if not can_edit(user, ann):
             raise HTTPException(403, "只有公告建立者可以編輯")
         try:
+            if importance not in IMPORTANCE_LABELS:
+                raise ValueError("公告重要性無效")
             doc, text = _submission_doc(c, user, body_json, body, announcement_id, upload_session)
             if not title or not text:
                 raise ValueError("標題與內容不可空白")
@@ -1412,20 +1465,21 @@ def announcement_edit_action(
             ann_d["draft_title"] = title
             ann_d["draft_body"] = body
             ann_d["draft_body_json"] = body_json or dump_doc(legacy_text_doc(body))
+            ann_d["draft_importance"] = importance
             ann_d["has_unpublished_changes"] = 1 if ann["current_version"] else 0
             return render(request, "announcement_edit.html", announcement=ann_d, revisions=[dict(r) for r in revs], error=str(exc), active_bot=dict(bot) if bot else None, can_edit=True, can_publish=True, can_withdraw=can_withdraw(user, ann_d), can_delete=can_delete(user, ann_d), editor_doc=load_doc(ann_d["draft_body_json"], body), upload_session=upload_session or token())
         t = now_iso()
         doc_json = dump_doc(doc)
         if ann["current_version"] > 0:
             c.execute(
-                """UPDATE announcements SET draft_title=?,draft_body=?,draft_body_json=?,has_unpublished_changes=1,
+                """UPDATE announcements SET draft_title=?,draft_body=?,draft_body_json=?,draft_importance=?,has_unpublished_changes=1,
                 scheduled_publish_at=?,expires_at=?,updated_by=?,updated_at=? WHERE id=?""",
-                (title, text, doc_json, scheduled, expires, user["id"], t, announcement_id),
+                (title, text, doc_json, importance, scheduled, expires, user["id"], t, announcement_id),
             )
         else:
             c.execute(
-                """UPDATE announcements SET title=?,body=?,body_json=?,scheduled_publish_at=?,expires_at=?,updated_by=?,updated_at=? WHERE id=?""",
-                (title, text, doc_json, scheduled, expires, user["id"], t, announcement_id),
+                """UPDATE announcements SET title=?,body=?,body_json=?,importance=?,scheduled_publish_at=?,expires_at=?,updated_by=?,updated_at=? WHERE id=?""",
+                (title, text, doc_json, importance, scheduled, expires, user["id"], t, announcement_id),
             )
 
         published_version = None
@@ -1497,6 +1551,55 @@ def announcement_delete(request: Request, announcement_id: str, csrf_token: str 
         c.execute("UPDATE announcements SET deleted_at=?,updated_by=?,updated_at=? WHERE id=?", (now_iso(), user["id"], now_iso(), announcement_id))
     audit(user["id"], "announcement.soft_delete", "announcement", announcement_id)
     return RedirectResponse("/", status_code=303)
+
+
+
+@app.get("/manage/hass-admin", response_class=HTMLResponse)
+def hass_admin_settings(request: Request):
+    try:
+        user = require_user(request, "/manage/hass-admin")
+        require_sysadmin(user)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return auth_redirect_for(exc)
+        raise
+    error = None
+    try:
+        admins = list_ha_administrators()
+    except HAAdminDirectoryUnavailable as exc:
+        admins = []
+        error = str(exc)
+    with conn() as c:
+        linked = [dict(r) for r in c.execute(
+            "SELECT username,display_name FROM users WHERE role='SYSADMIN' AND is_active=1 AND hass_user_id IS NOT NULL ORDER BY display_name"
+        ).fetchall()]
+    return render(request, "hass_admin.html", admins=admins, linked=linked, error=error)
+
+
+@app.post("/manage/hass-admin/bind")
+def hass_admin_bind(request: Request, hass_user_id: str = Form(...), csrf_token: str = Form(...)):
+    require_csrf(request, csrf_token)
+    admin = require_user(request)
+    require_sysadmin(admin)
+    eligible = {row["id"] for row in list_ha_administrators()}
+    if hass_user_id not in eligible:
+        raise HTTPException(400, "所選帳號不是目前有效的 HA 管理員")
+    with conn() as c:
+        existing = c.execute("SELECT id,role FROM users WHERE hass_user_id=?", (hass_user_id,)).fetchone()
+        if existing:
+            if existing["role"] == "BOT":
+                raise HTTPException(409, "機器人帳號不能綁定管理員")
+            c.execute("UPDATE users SET role='SYSADMIN',updated_at=? WHERE id=?", (now_iso(), existing["id"]))
+            target_id = existing["id"]
+        else:
+            current = c.execute("SELECT hass_user_id FROM users WHERE id=?", (admin["id"],)).fetchone()
+            if not current or current["hass_user_id"] not in (None, hass_user_id):
+                raise HTTPException(409, "目前帳號已綁定另一位 HA 使用者，請先在帳號管理解除舊綁定")
+            c.execute("UPDATE users SET hass_user_id=?,updated_at=? WHERE id=?", (hass_user_id, now_iso(), admin["id"]))
+            target_id = admin["id"]
+    reset_admin_cache()
+    audit(admin["id"], "account.bind_hass_admin", "user", target_id, {"hass_user_id": hass_user_id})
+    return RedirectResponse("/manage/hass-admin", status_code=303)
 
 
 @app.get("/manage/accounts", response_class=HTMLResponse)
