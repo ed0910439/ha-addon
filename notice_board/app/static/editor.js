@@ -1,5 +1,6 @@
 import { Editor, Node } from 'https://cdn.jsdelivr.net/npm/@tiptap/core@3.31.3/+esm'
 import StarterKit from 'https://cdn.jsdelivr.net/npm/@tiptap/starter-kit@3.31.3/+esm'
+import { Markdown } from 'https://cdn.jsdelivr.net/npm/@tiptap/markdown@3.31.3/+esm'
 
 const bytesLabel = (bytes) => {
   const value = Number(bytes || 0)
@@ -14,7 +15,52 @@ const appUrl = (path) => `${appBasePath}${path.startsWith('/') ? path : '/' + pa
 const safeFileUrl = (fileId, download = false) =>
   appUrl(`/files/${encodeURIComponent(String(fileId || ''))}${download ? '?download=true' : ''}`)
 
+const pdfNodeCache = new Map()
+const PDF_MARKER = /^:::notice-pdf\[([0-9a-f-]{36})\|(inline|attachment)\](?:\r?\n|$)/i
+function rememberPdfNodes(doc) {
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'pdfAttachment' && node.attrs?.fileId) {
+      pdfNodeCache.set(node.attrs.fileId, { ...node.attrs })
+    }
+    for (const child of node.content || []) visit(child)
+  }
+  visit(doc)
+}
+function countPdfNodes(doc) {
+  let n = 0
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'pdfAttachment') n++
+    for (const child of node.content || []) visit(child)
+  }
+  visit(doc)
+  return n
+}
+
 const PdfAttachment = Node.create({
+  markdownTokenName: 'notice_pdf',
+  markdownTokenizer: {
+    name: 'notice_pdf',
+    level: 'block',
+    start(src) { return src.indexOf(':::notice-pdf[') },
+    tokenizer(src) {
+      const match = PDF_MARKER.exec(src)
+      if (!match) return
+      return { type: 'notice_pdf', raw: match[0], fileId: match[1], displayMode: match[2] }
+    },
+  },
+  parseMarkdown(token) {
+    const saved = pdfNodeCache.get(token.fileId)
+    if (!saved) throw new Error('此 Markdown 包含未授權或未知的 PDF 附件標記，請回復原本的附件標記。')
+    return { type: 'pdfAttachment', attrs: { ...saved, displayMode: token.displayMode } }
+  },
+  renderMarkdown(node) {
+    const id = node.attrs?.fileId || ''
+    const mode = node.attrs?.displayMode === 'inline' ? 'inline' : 'attachment'
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('PDF 附件 ID 無法安全轉換成 Markdown。')
+    return ':::notice-pdf[' + id + '|' + mode + ']\n\n'
+  },
   name: 'pdfAttachment',
   group: 'block',
   atom: true,
@@ -163,7 +209,7 @@ const PdfAttachment = Node.create({
   },
 })
 
-const extensions = [StarterKit.configure({ link: false, underline: false }), PdfAttachment]
+const extensions = [StarterKit.configure({ link: false, underline: false }), PdfAttachment, Markdown]
 
 function readJsonScript(selector, fallback = { type: 'doc', content: [{ type: 'paragraph' }] }) {
   const el = document.querySelector(selector)
@@ -184,6 +230,7 @@ function updateToolbar(editor, toolbar) {
     if (command === 'orderedList') active = editor.isActive('orderedList')
     if (command === 'blockquote') active = editor.isActive('blockquote')
     button.classList.toggle('is-active', active)
+    button.setAttribute('aria-pressed', String(active))
   })
 }
 
@@ -229,10 +276,21 @@ function initEditor() {
   const uploadStatus = root.querySelector('[data-upload-status]')
   const dialog = document.querySelector('#pdf-display-dialog')
   const initialContent = readJsonScript('#editor-initial-content')
+  const markdownToggle = root.querySelector('[data-markdown-toggle]')
+  const markdownPanel = root.querySelector('[data-markdown-panel]')
+  const markdownSource = root.querySelector('[data-markdown-source]')
+  const markdownError = root.querySelector('[data-markdown-error]')
+  const displayMarkdownError = (message) => {
+    if (!markdownError) return
+    markdownError.textContent = message || ''
+    markdownError.hidden = !message
+  }
+  rememberPdfNodes(initialContent)
 
   let editor
   const sync = (instance) => {
     if (!instance) return
+    rememberPdfNodes(instance.getJSON())
     if (jsonField) jsonField.value = JSON.stringify(instance.getJSON())
     if (fallback) fallback.value = instance.getText({ blockSeparator: '\n' })
   }
@@ -252,9 +310,61 @@ function initEditor() {
     onTransaction: ({ editor }) => updateToolbar(editor, toolbar),
   })
 
+  function parseMarkdownSource() {
+    const markdown = markdownSource?.value || ''
+    if (markdown.length > 50000) throw new Error('Markdown 內容不得超過 50,000 字。')
+    // Never silently discard file nodes because a user typed an unknown file ID.
+    const tokens = [...markdown.matchAll(/:::notice-pdf\[([^\]\r\n]+)\]/g)]
+    for (const match of tokens) {
+      const parts = match[1].split('|')
+      if (parts.length !== 2 || !pdfNodeCache.has(parts[0]) || !['inline', 'attachment'].includes(parts[1])) {
+        throw new Error('PDF 標記無法識別。請保留原本的 :::notice-pdf[...] 區塊。')
+      }
+    }
+    const doc = editor.markdown.parse(markdown)
+    if (!doc || doc.type !== 'doc' || countPdfNodes(doc) !== tokens.length) {
+      throw new Error('Markdown 轉換未完整保留 PDF 附件，已取消操作，原始碼仍保留。')
+    }
+    return doc
+  }
+
+  const setMarkdownMode = (enabled) => {
+    displayMarkdownError('')
+    if (enabled) {
+      try {
+        rememberPdfNodes(editor.getJSON())
+        if (!editor.getMarkdown || !editor.markdown?.parse) throw new Error('Markdown 模組無法使用，請檢查載入狀態。')
+        markdownSource.value = editor.getMarkdown()
+      } catch (error) {
+        displayMarkdownError(error?.message || 'Markdown 來源無法建立。')
+        markdownToggle.checked = false
+        return
+      }
+    } else {
+      try {
+        const doc = parseMarkdownSource()
+        editor.commands.setContent(doc)
+        sync(editor)
+      } catch (error) {
+        displayMarkdownError(error?.message || 'Markdown 轉換失敗。')
+        markdownToggle.checked = true
+        return
+      }
+    }
+    markdownToggle.checked = enabled
+    markdownPanel.hidden = !enabled
+    mount.hidden = enabled
+    toolbar?.querySelectorAll('[data-command]').forEach((button) => { button.disabled = enabled })
+    if (uploadButton) uploadButton.disabled = enabled
+    if (enabled) markdownSource.focus()
+  }
+  markdownToggle?.addEventListener('change', () => setMarkdownMode(markdownToggle.checked))
+  markdownSource?.addEventListener('input', () => displayMarkdownError(''))
+
   toolbar?.addEventListener('click', (event) => {
+
     const button = event.target.closest('[data-command]')
-    if (!button) return
+    if (!button || markdownToggle?.checked) return
     const command = button.dataset.command
     const chain = editor.chain().focus()
     if (command === 'bold') chain.toggleBold().run()
@@ -314,7 +424,21 @@ function initEditor() {
     }
   })
 
-  form?.addEventListener('submit', () => sync(editor))
+  form?.addEventListener('submit', (event) => {
+    try {
+      if (markdownToggle?.checked) {
+        const doc = parseMarkdownSource()
+        editor.commands.setContent(doc)
+      }
+      sync(editor)
+      displayMarkdownError('')
+    } catch (error) {
+      event.preventDefault()
+      displayMarkdownError(error?.message || '內容轉換失敗，未儲存公告。')
+      markdownPanel.hidden = false
+      markdownSource?.focus()
+    }
+  })
 }
 
 function initViewers() {
