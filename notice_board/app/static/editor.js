@@ -27,6 +27,12 @@ function rememberPdfNodes(doc) {
   }
   visit(doc)
 }
+function scanPdfMarkers(markdown) {
+  const tokens = [...markdown.matchAll(/:::notice-pdf\[([^\]\r\n]+)\]/g)]
+  const starts = markdown.match(/:::notice-pdf\[/g) || []
+  if (starts.length !== tokens.length) throw new Error('PDF 標記不完整，為保護附件已取消儲存。')
+  return tokens
+}
 function countPdfNodes(doc) {
   let n = 0
   const visit = (node) => {
@@ -318,9 +324,7 @@ function initEditor() {
     const markdown = markdownSource?.value || ''
     // Server validates actual document text, not formatting delimiters.
     // Never silently discard file nodes because a user typed an unknown file ID.
-    const tokens = [...markdown.matchAll(/:::notice-pdf\[([^\]\r\n]+)\]/g)]
-    const starts = markdown.match(/:::notice-pdf\[/g) || []
-    if (starts.length !== tokens.length) throw new Error('PDF 標記不完整，為保護附件已取消儲存。')
+    const tokens = scanPdfMarkers(markdown)
     for (const match of tokens) {
       const parts = match[1].split('|')
       if (parts.length !== 2 || !pdfNodeCache.has(parts[0]) || !['inline', 'attachment'].includes(parts[1])) {
