@@ -44,7 +44,7 @@ const PdfAttachment = Node.create({
     name: 'notice_pdf',
     level: 'block',
     start(src) { return src.indexOf(':::notice-pdf[') },
-    tokenizer(src) {
+    tokenize(src) {
       const match = PDF_MARKER.exec(src)
       if (!match) return
       return { type: 'notice_pdf', raw: match[0], fileId: match[1], displayMode: match[2] }
@@ -230,7 +230,9 @@ function updateToolbar(editor, toolbar) {
     if (command === 'orderedList') active = editor.isActive('orderedList')
     if (command === 'blockquote') active = editor.isActive('blockquote')
     button.classList.toggle('is-active', active)
-    button.setAttribute('aria-pressed', String(active))
+    if (['bold', 'italic', 'strike', 'heading2', 'heading3', 'bulletList', 'orderedList', 'blockquote'].includes(command)) {
+      button.setAttribute('aria-pressed', String(active))
+    }
   })
 }
 
@@ -288,6 +290,8 @@ function initEditor() {
   rememberPdfNodes(initialContent)
 
   let editor
+  let uploading = false
+  let markdownPdfSnapshot = []
   const sync = (instance) => {
     if (!instance) return
     rememberPdfNodes(instance.getJSON())
@@ -312,9 +316,11 @@ function initEditor() {
 
   function parseMarkdownSource() {
     const markdown = markdownSource?.value || ''
-    if (markdown.length > 50000) throw new Error('Markdown 內容不得超過 50,000 字。')
+    // Server validates actual document text, not formatting delimiters.
     // Never silently discard file nodes because a user typed an unknown file ID.
     const tokens = [...markdown.matchAll(/:::notice-pdf\[([^\]\r\n]+)\]/g)]
+    const starts = markdown.match(/:::notice-pdf\[/g) || []
+    if (starts.length !== tokens.length) throw new Error('PDF 標記不完整，為保護附件已取消儲存。')
     for (const match of tokens) {
       const parts = match[1].split('|')
       if (parts.length !== 2 || !pdfNodeCache.has(parts[0]) || !['inline', 'attachment'].includes(parts[1])) {
@@ -322,17 +328,45 @@ function initEditor() {
       }
     }
     const doc = editor.markdown.parse(markdown)
-    if (!doc || doc.type !== 'doc' || countPdfNodes(doc) !== tokens.length) {
+    const fileIds = []
+    const visit = (node) => {
+      if (!node || typeof node !== 'object') return
+      if (node.type === 'pdfAttachment') fileIds.push(node.attrs?.fileId)
+      for (const child of node.content || []) visit(child)
+    }
+    visit(doc)
+    const expected = markdownPdfSnapshot.slice().sort()
+    if (!doc || doc.type !== 'doc' || countPdfNodes(doc) !== tokens.length ||
+        JSON.stringify(fileIds.slice().sort()) !== JSON.stringify(expected)) {
       throw new Error('Markdown 轉換未完整保留 PDF 附件，已取消操作，原始碼仍保留。')
     }
+    let characters = 0
+    const countText = (node) => {
+      if (!node || typeof node !== 'object') return
+      if (node.type === 'text') characters += (node.text || '').length
+      for (const child of node.content || []) countText(child)
+    }
+    countText(doc)
+    if (characters > 50000) throw new Error('公告文字超過 50,000 字。')
     return doc
   }
 
   const setMarkdownMode = (enabled) => {
     displayMarkdownError('')
     if (enabled) {
+      if (uploading) {
+        displayMarkdownError('PDF 正在上傳；請完成上傳後再切換 Markdown。')
+        markdownToggle.checked = false
+        return
+      }
       try {
         rememberPdfNodes(editor.getJSON())
+        markdownPdfSnapshot = []
+        const visit = (node) => {
+          if (node?.type === 'pdfAttachment') markdownPdfSnapshot.push(node.attrs?.fileId)
+          for (const child of node?.content || []) visit(child)
+        }
+        visit(editor.getJSON())
         if (!editor.getMarkdown || !editor.markdown?.parse) throw new Error('Markdown 模組無法使用，請檢查載入狀態。')
         markdownSource.value = editor.getMarkdown()
       } catch (error) {
@@ -389,6 +423,8 @@ function initEditor() {
       if (uploadStatus) uploadStatus.textContent = '請選擇 PDF 檔案。'
       return
     }
+    uploading = true
+    markdownToggle.disabled = true
     uploadButton.disabled = true
     if (uploadStatus) uploadStatus.textContent = `正在檢查 ${file.name}…`
     try {
@@ -420,12 +456,15 @@ function initEditor() {
     } catch (error) {
       if (uploadStatus) uploadStatus.textContent = error?.message || 'PDF 上傳失敗。'
     } finally {
-      uploadButton.disabled = false
+      uploading = false
+      markdownToggle.disabled = false
+      uploadButton.disabled = Boolean(markdownToggle?.checked)
     }
   })
 
   form?.addEventListener('submit', (event) => {
     try {
+      if (uploading) throw new Error('PDF 尚在上傳，請完成後再儲存。')
       if (markdownToggle?.checked) {
         const doc = parseMarkdownSource()
         editor.commands.setContent(doc)
