@@ -12,7 +12,7 @@ const context = vm.createContext({
   document: {querySelector: () => null, querySelectorAll: () => []},
 })
 const {PdfAttachment, rememberPdfNodes, scanPdfMarkers} = vm.runInContext(
-  source + '\n({PdfAttachment,rememberPdfNodes,scanPdfMarkers})', context,
+  source + '\n;({PdfAttachment,rememberPdfNodes,scanPdfMarkers})', context,
 )
 const id = '2710783d-86a4-472b-9602-1a6577cf435d'
 const attrs = {fileId: id, fileName:'file.pdf', pageCount:3, sizeBytes:90, displayMode:'inline'}
