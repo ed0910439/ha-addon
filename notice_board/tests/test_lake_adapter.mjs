@@ -20,6 +20,6 @@ assert.deepEqual(converted,doc)
 const pdf={type:'doc',content:[{type:'pdfAttachment',attrs:{fileId:'protected-pdf'}}]}
 assert.equal(eligibleForLake(pdf),false)
 assert.throws(()=>tiptapToLakeHTML(pdf),/PDF/)
-assert.throws(()=>lakeHTMLToTiptap('<p>OK</p><lake-box name="file"></lake-box>',DOMParser),/未支援/)
-assert.throws(()=>lakeHTMLToTiptap('<p>OK</p><iframe src="https://example.com"></iframe>',DOMParser),/未支援/)
+assert.throws(()=>lakeHTMLToTiptap('<p>OK</p><lake-box name="file"></lake-box>',DOMParser),/不支援|未支援/)
+assert.throws(()=>lakeHTMLToTiptap('<p>OK</p><iframe src="https://example.com"></iframe>',DOMParser),/不支援|未支援/)
 console.log('Lake bridge strict text and PDF fallback checks passed')
