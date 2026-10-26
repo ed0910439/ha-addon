@@ -55,6 +55,17 @@ export function lakeHTMLToTiptap(html, Parser=globalThis.DOMParser) {
   if (!Parser) throw new Error('此瀏覽器無法安全解析編輯器內容。')
   const tree = new Parser().parseFromString('<!doctype html><html><body>'+String(html)+'</body></html>', 'text/html')
   const safeMarks = (marks) => [...new Map(marks.map(m=>[m.type,m])).values()]
+  const normalizeTexts = (nodes) => {
+    const out=[]
+    for(const node of nodes) {
+      const prev=out[out.length-1]
+      if(prev?.type==='text' && node.type==='text' &&
+         JSON.stringify(prev.marks||[])===JSON.stringify(node.marks||[])) {
+        prev.text+=node.text
+      } else out.push(node)
+    }
+    return out
+  }
   const children = node => Array.from(node.childNodes||[])
   function inline(node, marks=[]) {
     if (node.nodeType === 3) return node.textContent ? [{type:'text',text:node.textContent,...(marks.length?{marks:safeMarks(marks)}:{})}] : []
@@ -75,11 +86,11 @@ export function lakeHTMLToTiptap(html, Parser=globalThis.DOMParser) {
     if (name==='hr') return [{type:'horizontalRule'}]
     if (name==='pre') return [{type:'codeBlock',content:[{type:'text',text:node.textContent||''}]}]
     if (name==='p') {
-      const content=children(node).flatMap(c=>inline(c))
+      const content=normalizeTexts(children(node).flatMap(c=>inline(c)))
       return [content.length?{type:'paragraph',content}:{type:'paragraph'}]
     }
     if (/^h[1-3]$/.test(name)) {
-      const content=children(node).flatMap(c=>inline(c))
+      const content=normalizeTexts(children(node).flatMap(c=>inline(c)))
       return [{type:'heading',attrs:{level:Number(name[1])},...(content.length?{content}:{})}]
     }
     if (name==='ul' || name==='ol') {
