@@ -30,6 +30,7 @@ jobs:
       - name: Check JavaScript module syntax
         run: |
           node --input-type=module --check < notice_board/app/static/editor.js
+          node notice_board/tests/test_pdf_marker.mjs
           node --input-type=module --check < notice_board/app/static/app.js
       - name: Run release regression suite
         working-directory: notice_board

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.6.3
+
+- Repair the custom Tiptap Markdown tokenizer hook for existing PDF attachments.
+- Reject malformed, incomplete or omitted PDF markers before replacing documents; preserve all original file IDs during Markdown source editing.
+- Prevent switching modes or saving during in-flight PDF uploads to avoid losing newly uploaded files.
+- Validate the canonical text length rather than raw Markdown delimiters, and restrict aria-pressed to stateful formatting controls.
+- Compatibility hotfix while replacement with lakelib is evaluated.
+
+
 ## 2.6.2
 
 - 將公告編輯器粗體、斜體、刪除線、標題、清單、引言、分隔線、復原／重做、PDF 改成有中文提示與 ARIA 名稱的圖示工具列。
