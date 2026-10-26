@@ -1,5 +1,6 @@
 import { Editor, Node } from 'https://cdn.jsdelivr.net/npm/@tiptap/core@3.31.3/+esm'
 import StarterKit from 'https://cdn.jsdelivr.net/npm/@tiptap/starter-kit@3.31.3/+esm'
+import { initializeLakeEditor } from './lake_editor.js'
 import { Markdown } from 'https://cdn.jsdelivr.net/npm/@tiptap/markdown@3.31.3/+esm'
 
 const bytesLabel = (bytes) => {
@@ -439,6 +440,7 @@ function initEditor() {
       markdownSource?.focus()
     }
   })
+  return editor
 }
 
 function initViewers() {
@@ -458,5 +460,6 @@ function initViewers() {
   })
 }
 
-initEditor()
+const noticeEditor = initEditor()
+if (noticeEditor) initializeLakeEditor(document.querySelector('[data-tiptap-editor]'), noticeEditor)
 initViewers()
