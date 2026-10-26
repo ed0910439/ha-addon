@@ -744,3 +744,14 @@ textarea { resize: vertical; }
 .markdown-source-panel p{margin-bottom:0}
 .markdown-error{margin:9px 0}
 @media(max-width:600px){.editor-toolbar{gap:5px;padding:6px}.tool-icon-btn{width:36px;height:36px}.editor-header-row{align-items:center}.markdown-source-panel{padding:9px}}
+
+
+/* Lake 0.4.6 opt-in: preserves original editor for unsupported/PDF documents. */
+.lake-editor-shell{border:1px solid var(--line-strong);border-radius:12px;overflow:visible;background:#fff}
+.lake-editor-toolbar{border-bottom:1px solid var(--line);padding:7px;background:var(--panel-soft);min-height:45px}
+.lake-editor-region{min-height:330px;padding:10px}
+.lake-editor-region .lake-editor{min-height:310px}
+.lake-info{padding:8px 12px 0;color:var(--muted)}
+.lake-editor-actions{padding:10px 12px;border-top:1px solid var(--line);display:flex;justify-content:end}
+.lake-editor-shell .alert{margin:12px}
+.lake-editor-shell[hidden]{display:none!important}

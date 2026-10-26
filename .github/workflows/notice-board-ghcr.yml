@@ -32,6 +32,14 @@ jobs:
           node --input-type=module --check < notice_board/app/static/editor.js
           node notice_board/tests/test_pdf_marker.mjs
           node --input-type=module --check < notice_board/app/static/app.js
+      - name: Test Lake/Tiptap adapter (experimental)
+        working-directory: notice_board
+        run: |
+          npm install --no-save --no-package-lock linkedom@0.18.12 playwright-core@1.56.1
+          node --input-type=module --check < app/static/lake_adapter.js
+          node --input-type=module --check < app/static/lake_editor.js
+          node tests/test_lake_adapter.mjs
+          node tests/test_lake_browser.mjs
       - name: Run release regression suite
         working-directory: notice_board
         run: python -m unittest discover -s tests -v
