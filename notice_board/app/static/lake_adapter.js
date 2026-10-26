@@ -53,7 +53,7 @@ export function tiptapToLakeHTML(doc) {
 
 export function lakeHTMLToTiptap(html, Parser=globalThis.DOMParser) {
   if (!Parser) throw new Error('此瀏覽器無法安全解析編輯器內容。')
-  const tree = new Parser().parseFromString(String(html), 'text/html')
+  const tree = new Parser().parseFromString('<!doctype html><html><body>'+String(html)+'</body></html>', 'text/html')
   const safeMarks = (marks) => [...new Map(marks.map(m=>[m.type,m])).values()]
   const children = node => Array.from(node.childNodes||[])
   function inline(node, marks=[]) {
