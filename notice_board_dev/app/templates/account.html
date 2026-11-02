@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}我的帳號{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Settings</div><h1>設定</h1><p class="muted">管理你的帳號與已認證裝置。</p></div></div>
+<nav class="settings-tabs" aria-label="設定選單"><a class="is-active" href="{{ base_path }}/me/account">我的帳號</a><a href="{{ base_path }}/me/devices">裝置</a></nav>
+{% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert success">{{ success }}</div>{% endif %}
+{% if is_ingress %}<div class="alert info">目前透過 Home Assistant Ingress 自動登入。這裡的密碼只用於從外部網址直接登入 Notice Board。</div>{% endif %}
+<section class="card account-settings">
+  <h2>修改密碼</h2>
+  <form method="post" action="{{ base_path }}/me/account/password" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>目前密碼<input type="password" name="current_password" autocomplete="current-password" required></label>
+    <label>新密碼<input type="password" name="new_password" minlength="12" autocomplete="new-password" required></label>
+    <label>再輸入一次<input type="password" name="confirm" minlength="12" autocomplete="new-password" required></label>
+    <button class="btn primary" type="submit">更新密碼</button>
+  </form>
+  <p class="small muted top-gap">修改自己的密碼不會解除目前已認證裝置；若要移除裝置，請到「裝置」頁處理。</p>
+</section>
+{% endblock %}

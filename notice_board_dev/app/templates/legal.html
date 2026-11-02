@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ legal_title }}{% endblock %}
+{% block content %}
+<section class="notice-view card legal-page">
+  <div class="eyebrow">{{ legal_kicker }}</div>
+  <h1>{{ legal_title }}</h1>
+  {% for paragraph in legal_paragraphs %}<p>{{ paragraph }}</p>{% endfor %}
+</section>
+{% endblock %}

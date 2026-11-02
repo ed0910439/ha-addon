@@ -1,0 +1,55 @@
+name: Notice Board (DEV)
+version: "2.6.3-dev.1"
+slug: notice_board_dev
+description: "Isolated LakeJS development test app; not for production announcements."
+url: "https://github.com/ed0910439/ha-addon/tree/master/notice_board_dev"
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: manual
+init: false
+stage: experimental
+homeassistant_api: true
+ingress: true
+ingress_port: 8000
+panel_icon: mdi:flask-outline
+panel_title: 公告 DEV
+panel_admin: true
+backup: cold
+ports:
+  8000/tcp: null
+ports_description:
+  8000/tcp: "Notice Board web interface"
+options:
+  bootstrap_admin_username: admin
+  trust_cloudflare: false
+  display_timezone: Asia/Taipei
+  totp_issuer: Notice Board
+  max_devices_per_user: 3
+  device_trust_days: 180
+  max_pdf_upload_mb: 25
+  scheduler_interval_seconds: 30
+  hass_persistent_notifications: false
+  ntfy_base_url: https://ntfy.sh
+  ntfy_topic_map: "{}"
+
+schema:
+  public_url: "url?"
+  bootstrap_admin_username: str
+  bootstrap_admin_password: "password?"
+  trust_cloudflare: bool
+  display_timezone: str
+  totp_issuer: str
+  max_devices_per_user: "int(1,10)"
+  device_trust_days: "int(1,3650)"
+  max_pdf_upload_mb: "int(1,200)"
+  scheduler_interval_seconds: "int(10,3600)"
+  hass_webhook_id: "str?"
+  hass_persistent_notifications: bool
+  ntfy_base_url: url
+  ntfy_default_topic: "str?"
+  ntfy_topic_map: str
+  ntfy_access_token: "password?"
+  ntfy_username: "str?"
+  ntfy_password: "password?"

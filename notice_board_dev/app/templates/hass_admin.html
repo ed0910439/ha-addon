@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}HA 管理員綁定{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Home Assistant Identity</div><h1>HA 管理員綁定</h1></div></div>
+<section class="card stack" style="max-width:780px">
+  <p>從 Home Assistant 的有效管理員清單選擇一位，與 Notice Board 系統管理員權限綁定。只使用 HA 使用者 ID 驗證；修改顯示名稱不影響綁定。</p>
+  <p class="small muted">已有本地管理員仍保留作為復原入口。HA 管理員被停用或移除管理權限時，其 Ingress 管理員存取也會停止。</p>
+  {% if message %}<div class="alert info">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if admins %}
+  <form method="post" action="{{ base_path }}/manage/hass-admin/bind" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>選擇 Home Assistant 管理員
+      <select name="hass_user_id" required>
+      {% for item in admins %}
+        <option value="{{ item.id }}">{{ item.name }}{% if item.username %}（{{ item.username }}）{% endif %}{% if item.is_owner %} · 擁有者{% endif %}</option>
+      {% endfor %}
+      </select>
+    </label>
+    <p class="small muted">若此 HA 帳號已綁定一般 Notice Board 帳戶，系統會提升該帳戶的權限以保留其已閱紀錄；不會清除原有裝置與資料。</p>
+    <button type="submit" class="btn primary" data-confirm="確定授予所選 HA 管理員 Notice Board 系統管理員權限？">確認綁定</button>
+  </form>
+  {% else %}
+  <div class="alert warning">目前無法讀取符合條件的 HA 管理員，請檢查外掛日誌與 Home Assistant 連線。</div>
+  {% endif %}
+  <h3>目前已綁定的 Notice Board 管理員</h3>
+  {% for item in linked %}<div class="user-chip">{{ item.display_name }}（{{ item.username }}） · 已綁定 HA 使用者</div>
+  {% else %}<p class="muted small">尚無綁定；現有本地管理員可繼續登入。</p>{% endfor %}
+</section>
+{% endblock %}

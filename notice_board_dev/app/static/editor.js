@@ -1,0 +1,508 @@
+import { Editor, Node } from 'https://cdn.jsdelivr.net/npm/@tiptap/core@3.31.3/+esm'
+import StarterKit from 'https://cdn.jsdelivr.net/npm/@tiptap/starter-kit@3.31.3/+esm'
+import { initializeLakeEditor } from './lake_editor.js'
+import { Markdown } from 'https://cdn.jsdelivr.net/npm/@tiptap/markdown@3.31.3/+esm'
+
+const bytesLabel = (bytes) => {
+  const value = Number(bytes || 0)
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const appBasePath = (document.querySelector('meta[name="app-base-path"]')?.content || '').replace(/\/$/, '')
+const appUrl = (path) => `${appBasePath}${path.startsWith('/') ? path : '/' + path}`
+
+const safeFileUrl = (fileId, download = false) =>
+  appUrl(`/files/${encodeURIComponent(String(fileId || ''))}${download ? '?download=true' : ''}`)
+
+const pdfNodeCache = new Map()
+const PDF_MARKER = /^:::notice-pdf\[([0-9a-f-]{36})\|(inline|attachment)\](?:\r?\n|$)/i
+function rememberPdfNodes(doc) {
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'pdfAttachment' && node.attrs?.fileId) {
+      pdfNodeCache.set(node.attrs.fileId, { ...node.attrs })
+    }
+    for (const child of node.content || []) visit(child)
+  }
+  visit(doc)
+}
+function scanPdfMarkers(markdown) {
+  const tokens = [...markdown.matchAll(/:::notice-pdf\[([^\]\r\n]+)\]/g)]
+  const starts = markdown.match(/:::notice-pdf\[/g) || []
+  if (starts.length !== tokens.length) throw new Error('PDF 標記不完整，為保護附件已取消儲存。')
+  return tokens
+}
+function countPdfNodes(doc) {
+  let n = 0
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'pdfAttachment') n++
+    for (const child of node.content || []) visit(child)
+  }
+  visit(doc)
+  return n
+}
+
+const PdfAttachment = Node.create({
+  markdownTokenName: 'notice_pdf',
+  markdownTokenizer: {
+    name: 'notice_pdf',
+    level: 'block',
+    start(src) { return src.indexOf(':::notice-pdf[') },
+    tokenize(src) {
+      const match = PDF_MARKER.exec(src)
+      if (!match) return
+      return { type: 'notice_pdf', raw: match[0], fileId: match[1], displayMode: match[2] }
+    },
+  },
+  parseMarkdown(token) {
+    const saved = pdfNodeCache.get(token.fileId)
+    if (!saved) throw new Error('此 Markdown 包含未授權或未知的 PDF 附件標記，請回復原本的附件標記。')
+    return { type: 'pdfAttachment', attrs: { ...saved, displayMode: token.displayMode } }
+  },
+  renderMarkdown(node) {
+    const id = node.attrs?.fileId || ''
+    const mode = node.attrs?.displayMode === 'inline' ? 'inline' : 'attachment'
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('PDF 附件 ID 無法安全轉換成 Markdown。')
+    return ':::notice-pdf[' + id + '|' + mode + ']\n\n'
+  },
+  name: 'pdfAttachment',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  draggable: true,
+
+  addAttributes() {
+    return {
+      fileId: { default: null },
+      fileName: { default: 'PDF' },
+      pageCount: { default: 0 },
+      sizeBytes: { default: 0 },
+      displayMode: { default: 'attachment' },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: 'figure[data-pdf-attachment]' }]
+  },
+
+  renderHTML({ node }) {
+    const { fileId, fileName, pageCount, displayMode } = node.attrs
+    const base = {
+      'data-pdf-attachment': '',
+      'data-file-id': String(fileId || ''),
+      'data-display-mode': displayMode,
+      class: `pdf-node pdf-${displayMode}`,
+    }
+    if (displayMode === 'inline') {
+      return [
+        'figure', base,
+        ['div', { class: 'pdf-node-head' },
+          ['strong', {}, String(fileName || 'PDF')],
+          ['span', {}, `${Number(pageCount || 0)} 頁 · 直接顯示`],
+        ],
+        ['iframe', {
+          src: safeFileUrl(fileId),
+          title: String(fileName || 'PDF'),
+          loading: 'lazy',
+          class: 'pdf-frame',
+        }],
+        ['a', { href: safeFileUrl(fileId), target: '_blank', rel: 'noopener', class: 'pdf-open-link' }, '另開 PDF'],
+      ]
+    }
+    return [
+      'figure', base,
+      ['a', { href: safeFileUrl(fileId, true), class: 'pdf-attachment-card' },
+        ['span', { class: 'pdf-icon', 'aria-hidden': 'true' }, 'PDF'],
+        ['span', { class: 'pdf-file-meta' },
+          ['strong', {}, String(fileName || 'PDF')],
+          ['span', {}, `${Number(pageCount || 0)} 頁 · 附檔`],
+        ],
+      ],
+    ]
+  },
+
+  addNodeView() {
+    return ({ editor, node, getPos }) => {
+      const dom = document.createElement('div')
+      dom.className = 'pdf-node-editor'
+      dom.contentEditable = 'false'
+
+      const render = (currentNode) => {
+        dom.replaceChildren()
+        const attrs = currentNode.attrs
+        const head = document.createElement('div')
+        head.className = 'pdf-node-editor-main'
+
+        const badge = document.createElement('span')
+        badge.className = 'pdf-icon'
+        badge.textContent = 'PDF'
+
+        const meta = document.createElement('div')
+        meta.className = 'pdf-file-meta'
+        const name = document.createElement('strong')
+        name.textContent = attrs.fileName || 'PDF'
+        const detail = document.createElement('span')
+        detail.textContent = `${Number(attrs.pageCount || 0)} 頁 · ${bytesLabel(attrs.sizeBytes)} · ${attrs.displayMode === 'inline' ? '直接顯示' : '附檔'}`
+        meta.append(name, detail)
+        head.append(badge, meta)
+        dom.append(head)
+
+        if (editor.isEditable) {
+          const controls = document.createElement('div')
+          controls.className = 'pdf-node-controls'
+          if (Number(attrs.pageCount || 0) <= 10) {
+            const toggle = document.createElement('button')
+            toggle.type = 'button'
+            toggle.className = 'btn small-btn'
+            toggle.textContent = attrs.displayMode === 'inline' ? '改成附檔' : '改成直接顯示'
+            toggle.addEventListener('click', () => {
+              const pos = getPos()
+              if (typeof pos !== 'number') return
+              editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, {
+                ...attrs,
+                displayMode: attrs.displayMode === 'inline' ? 'attachment' : 'inline',
+              }))
+            })
+            controls.append(toggle)
+          }
+          const remove = document.createElement('button')
+          remove.type = 'button'
+          remove.className = 'btn danger-outline small-btn'
+          remove.textContent = '移除'
+          remove.addEventListener('click', () => {
+            const pos = getPos()
+            if (typeof pos !== 'number') return
+            editor.commands.deleteRange({ from: pos, to: pos + currentNode.nodeSize })
+          })
+          controls.append(remove)
+          dom.append(controls)
+        } else if (attrs.displayMode === 'inline') {
+          const frame = document.createElement('iframe')
+          frame.src = safeFileUrl(attrs.fileId)
+          frame.title = attrs.fileName || 'PDF'
+          frame.loading = 'lazy'
+          frame.className = 'pdf-frame'
+          dom.append(frame)
+          const open = document.createElement('a')
+          open.href = safeFileUrl(attrs.fileId)
+          open.target = '_blank'
+          open.rel = 'noopener'
+          open.className = 'pdf-open-link'
+          open.textContent = '另開 PDF'
+          dom.append(open)
+        } else {
+          const open = document.createElement('a')
+          open.href = safeFileUrl(attrs.fileId, true)
+          open.className = 'pdf-open-link'
+          open.textContent = '開啟附檔'
+          dom.append(open)
+        }
+      }
+
+      render(node)
+      return {
+        dom,
+        update(updatedNode) {
+          if (updatedNode.type.name !== 'pdfAttachment') return false
+          node = updatedNode
+          render(updatedNode)
+          return true
+        },
+      }
+    }
+  },
+})
+
+const extensions = [StarterKit.configure({ link: false, underline: false }), PdfAttachment, Markdown]
+
+function readJsonScript(selector, fallback = { type: 'doc', content: [{ type: 'paragraph' }] }) {
+  const el = document.querySelector(selector)
+  if (!el) return fallback
+  try { return JSON.parse(el.textContent || '') } catch { return fallback }
+}
+
+function updateToolbar(editor, toolbar) {
+  toolbar?.querySelectorAll('[data-command]').forEach((button) => {
+    const command = button.dataset.command
+    let active = false
+    if (command === 'bold') active = editor.isActive('bold')
+    if (command === 'italic') active = editor.isActive('italic')
+    if (command === 'strike') active = editor.isActive('strike')
+    if (command === 'heading2') active = editor.isActive('heading', { level: 2 })
+    if (command === 'heading3') active = editor.isActive('heading', { level: 3 })
+    if (command === 'bulletList') active = editor.isActive('bulletList')
+    if (command === 'orderedList') active = editor.isActive('orderedList')
+    if (command === 'blockquote') active = editor.isActive('blockquote')
+    button.classList.toggle('is-active', active)
+    if (['bold', 'italic', 'strike', 'heading2', 'heading3', 'bulletList', 'orderedList', 'blockquote'].includes(command)) {
+      button.setAttribute('aria-pressed', String(active))
+    }
+  })
+}
+
+async function choosePdfMode(dialog, info) {
+  if (!info.inline_allowed) return 'attachment'
+  if (!dialog || typeof dialog.showModal !== 'function') {
+    return window.confirm(`這份 PDF 共 ${info.page_count} 頁。\n確定＝直接顯示於公告；取消＝作為附檔。`) ? 'inline' : 'attachment'
+  }
+  const name = dialog.querySelector('[data-pdf-dialog-name]')
+  const pages = dialog.querySelector('[data-pdf-dialog-pages]')
+  if (name) name.textContent = info.file_name
+  if (pages) pages.textContent = `${info.page_count} 頁`
+  dialog.showModal()
+  return new Promise((resolve) => {
+    const buttons = Array.from(dialog.querySelectorAll('[data-pdf-mode]'))
+    const onCancel = (event) => {
+      event.preventDefault()
+      finish('attachment')
+    }
+    const finish = (mode) => {
+      dialog.removeEventListener('cancel', onCancel)
+      buttons.forEach((button) => { button.onclick = null })
+      if (dialog.open) dialog.close()
+      resolve(mode)
+    }
+    buttons.forEach((button) => {
+      button.onclick = () => finish(button.dataset.pdfMode)
+    })
+    dialog.addEventListener('cancel', onCancel)
+  })
+}
+
+function initEditor() {
+  const root = document.querySelector('[data-tiptap-editor]')
+  if (!root) return
+  const form = root.closest('form')
+  const mount = root.querySelector('[data-editor-mount]')
+  const fallback = root.querySelector('textarea[name="body"]')
+  const jsonField = root.querySelector('textarea[name="body_json"]')
+  const toolbar = root.querySelector('[data-editor-toolbar]')
+  const fileInput = root.querySelector('input[type="file"][data-pdf-input]')
+  const uploadButton = root.querySelector('[data-upload-pdf]')
+  const uploadStatus = root.querySelector('[data-upload-status]')
+  const dialog = document.querySelector('#pdf-display-dialog')
+  const initialContent = readJsonScript('#editor-initial-content')
+  const markdownToggle = root.querySelector('[data-markdown-toggle]')
+  const markdownPanel = root.querySelector('[data-markdown-panel]')
+  const markdownSource = root.querySelector('[data-markdown-source]')
+  const markdownError = root.querySelector('[data-markdown-error]')
+  const displayMarkdownError = (message) => {
+    if (!markdownError) return
+    markdownError.textContent = message || ''
+    markdownError.hidden = !message
+  }
+  rememberPdfNodes(initialContent)
+
+  let editor
+  let uploading = false
+  let markdownPdfSnapshot = []
+  const sync = (instance) => {
+    if (!instance) return
+    rememberPdfNodes(instance.getJSON())
+    if (jsonField) jsonField.value = JSON.stringify(instance.getJSON())
+    if (fallback) fallback.value = instance.getText({ blockSeparator: '\n' })
+  }
+
+  editor = new Editor({
+    element: mount,
+    extensions,
+    content: initialContent,
+    editorProps: { attributes: { class: 'tiptap-prosemirror' } },
+    onCreate: ({ editor }) => {
+      root.classList.add('editor-ready')
+      sync(editor)
+      updateToolbar(editor, toolbar)
+    },
+    onUpdate: ({ editor }) => sync(editor),
+    onSelectionUpdate: ({ editor }) => updateToolbar(editor, toolbar),
+    onTransaction: ({ editor }) => updateToolbar(editor, toolbar),
+  })
+
+  function parseMarkdownSource() {
+    const markdown = markdownSource?.value || ''
+    // Server validates actual document text, not formatting delimiters.
+    // Never silently discard file nodes because a user typed an unknown file ID.
+    const tokens = scanPdfMarkers(markdown)
+    for (const match of tokens) {
+      const parts = match[1].split('|')
+      if (parts.length !== 2 || !pdfNodeCache.has(parts[0]) || !['inline', 'attachment'].includes(parts[1])) {
+        throw new Error('PDF 標記無法識別。請保留原本的 :::notice-pdf[...] 區塊。')
+      }
+    }
+    const doc = editor.markdown.parse(markdown)
+    const fileIds = []
+    const visit = (node) => {
+      if (!node || typeof node !== 'object') return
+      if (node.type === 'pdfAttachment') fileIds.push(node.attrs?.fileId)
+      for (const child of node.content || []) visit(child)
+    }
+    visit(doc)
+    const expected = markdownPdfSnapshot.slice().sort()
+    if (!doc || doc.type !== 'doc' || countPdfNodes(doc) !== tokens.length ||
+        JSON.stringify(fileIds.slice().sort()) !== JSON.stringify(expected)) {
+      throw new Error('Markdown 轉換未完整保留 PDF 附件，已取消操作，原始碼仍保留。')
+    }
+    let characters = 0
+    const countText = (node) => {
+      if (!node || typeof node !== 'object') return
+      if (node.type === 'text') characters += (node.text || '').length
+      for (const child of node.content || []) countText(child)
+    }
+    countText(doc)
+    if (characters > 50000) throw new Error('公告文字超過 50,000 字。')
+    return doc
+  }
+
+  const setMarkdownMode = (enabled) => {
+    displayMarkdownError('')
+    if (enabled) {
+      if (uploading) {
+        displayMarkdownError('PDF 正在上傳；請完成上傳後再切換 Markdown。')
+        markdownToggle.checked = false
+        return
+      }
+      try {
+        rememberPdfNodes(editor.getJSON())
+        markdownPdfSnapshot = []
+        const visit = (node) => {
+          if (node?.type === 'pdfAttachment') markdownPdfSnapshot.push(node.attrs?.fileId)
+          for (const child of node?.content || []) visit(child)
+        }
+        visit(editor.getJSON())
+        if (!editor.getMarkdown || !editor.markdown?.parse) throw new Error('Markdown 模組無法使用，請檢查載入狀態。')
+        markdownSource.value = editor.getMarkdown()
+      } catch (error) {
+        displayMarkdownError(error?.message || 'Markdown 來源無法建立。')
+        markdownToggle.checked = false
+        return
+      }
+    } else {
+      try {
+        const doc = parseMarkdownSource()
+        editor.commands.setContent(doc)
+        sync(editor)
+      } catch (error) {
+        displayMarkdownError(error?.message || 'Markdown 轉換失敗。')
+        markdownToggle.checked = true
+        return
+      }
+    }
+    markdownToggle.checked = enabled
+    markdownPanel.hidden = !enabled
+    mount.hidden = enabled
+    toolbar?.querySelectorAll('[data-command]').forEach((button) => { button.disabled = enabled })
+    if (uploadButton) uploadButton.disabled = enabled
+    if (enabled) markdownSource.focus()
+  }
+  markdownToggle?.addEventListener('change', () => setMarkdownMode(markdownToggle.checked))
+  markdownSource?.addEventListener('input', () => displayMarkdownError(''))
+
+  toolbar?.addEventListener('click', (event) => {
+
+    const button = event.target.closest('[data-command]')
+    if (!button || markdownToggle?.checked) return
+    const command = button.dataset.command
+    const chain = editor.chain().focus()
+    if (command === 'bold') chain.toggleBold().run()
+    else if (command === 'italic') chain.toggleItalic().run()
+    else if (command === 'strike') chain.toggleStrike().run()
+    else if (command === 'heading2') chain.toggleHeading({ level: 2 }).run()
+    else if (command === 'heading3') chain.toggleHeading({ level: 3 }).run()
+    else if (command === 'bulletList') chain.toggleBulletList().run()
+    else if (command === 'orderedList') chain.toggleOrderedList().run()
+    else if (command === 'blockquote') chain.toggleBlockquote().run()
+    else if (command === 'horizontalRule') chain.setHorizontalRule().run()
+    else if (command === 'undo') chain.undo().run()
+    else if (command === 'redo') chain.redo().run()
+  })
+
+  uploadButton?.addEventListener('click', () => fileInput?.click())
+  fileInput?.addEventListener('change', async () => {
+    const file = fileInput.files?.[0]
+    fileInput.value = ''
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      if (uploadStatus) uploadStatus.textContent = '請選擇 PDF 檔案。'
+      return
+    }
+    uploading = true
+    markdownToggle.disabled = true
+    uploadButton.disabled = true
+    if (uploadStatus) uploadStatus.textContent = `正在檢查 ${file.name}…`
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('csrf_token', form.querySelector('input[name="csrf_token"]').value)
+      fd.append('upload_session', form.querySelector('input[name="upload_session"]').value)
+      fd.append('announcement_id', form.querySelector('input[name="announcement_id"]')?.value || '')
+      const response = await fetch(appUrl('/api/attachments/pdf'), { method: 'POST', body: fd, credentials: 'same-origin' })
+      const info = await response.json()
+      if (!response.ok) throw new Error(info.error || 'PDF 上傳失敗')
+      const mode = await choosePdfMode(dialog, info)
+      editor.chain().focus().insertContent({
+        type: 'pdfAttachment',
+        attrs: {
+          fileId: info.file_id,
+          fileName: info.file_name,
+          pageCount: info.page_count,
+          sizeBytes: info.size_bytes,
+          displayMode: mode,
+        },
+      }).run()
+      sync(editor)
+      if (uploadStatus) {
+        uploadStatus.textContent = info.inline_allowed
+          ? `已加入 ${info.file_name}（${info.page_count} 頁，${mode === 'inline' ? '直接顯示' : '附檔'}）。`
+          : `已加入 ${info.file_name}（${info.page_count} 頁）；超過 10 頁，已依規則設為附檔。`
+      }
+    } catch (error) {
+      if (uploadStatus) uploadStatus.textContent = error?.message || 'PDF 上傳失敗。'
+    } finally {
+      uploading = false
+      markdownToggle.disabled = false
+      uploadButton.disabled = Boolean(markdownToggle?.checked)
+    }
+  })
+
+  form?.addEventListener('submit', (event) => {
+    try {
+      if (uploading) throw new Error('PDF 尚在上傳，請完成後再儲存。')
+      if (markdownToggle?.checked) {
+        const doc = parseMarkdownSource()
+        editor.commands.setContent(doc)
+      }
+      sync(editor)
+      displayMarkdownError('')
+    } catch (error) {
+      event.preventDefault()
+      displayMarkdownError(error?.message || '內容轉換失敗，未儲存公告。')
+      markdownPanel.hidden = false
+      markdownSource?.focus()
+    }
+  })
+  return editor
+}
+
+function initViewers() {
+  document.querySelectorAll('[data-tiptap-viewer]').forEach((element, index) => {
+    const scriptId = element.dataset.contentScript
+    const content = readJsonScript(`#${CSS.escape(scriptId || `viewer-content-${index}`)}`)
+    element.replaceChildren()
+    new Editor({
+      element,
+      extensions,
+      content,
+      editable: false,
+      editorProps: { attributes: { class: 'tiptap-prosemirror tiptap-readonly' } },
+    })
+    element.dataset.rendered = 'true'
+    element.dispatchEvent(new CustomEvent('noticeboard:viewer-ready', { bubbles: true }))
+  })
+}
+
+const noticeEditor = initEditor()
+if (noticeEditor) initializeLakeEditor(document.querySelector('[data-tiptap-editor]'), noticeEditor)
+initViewers()

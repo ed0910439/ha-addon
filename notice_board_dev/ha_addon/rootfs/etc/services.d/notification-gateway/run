@@ -1,0 +1,11 @@
+#!/usr/bin/with-contenv bashio
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /data/.noticeboard-runtime-env
+
+cd /opt/noticeboard
+bashio::log.info "Starting internal Notification Gateway on loopback port 8090"
+exec /opt/venv/bin/uvicorn notification_gateway.main:app \
+    --host 127.0.0.1 \
+    --port 8090

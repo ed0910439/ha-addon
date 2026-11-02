@@ -1,0 +1,42 @@
+name: Notice Board DEV (LakeJS) checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "notice_board_dev/**"
+      - ".github/workflows/notice-board-dev.yml"
+  pull_request:
+    paths:
+      - "notice_board_dev/**"
+      - ".github/workflows/notice-board-dev.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Python test dependencies
+        run: pip install -r notice_board_dev/requirements.txt httpx
+      - name: Run PDF and backend regression tests
+        working-directory: notice_board_dev
+        run: python -m unittest discover -s tests -v
+      - name: Check JS and test Lake adapter in real browser
+        working-directory: notice_board_dev
+        run: |
+          npm install --no-save --no-package-lock linkedom@0.18.12 playwright-core@1.56.1
+          node --input-type=module --check < app/static/editor.js
+          node --input-type=module --check < app/static/lake_adapter.js
+          node --input-type=module --check < app/static/lake_editor.js
+          node tests/test_lake_adapter.mjs
+          node tests/test_lake_browser.mjs
