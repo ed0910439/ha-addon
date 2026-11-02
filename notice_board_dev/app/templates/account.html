@@ -6,11 +6,18 @@
 {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 {% if success %}<div class="alert success">{{ success }}</div>{% endif %}
 {% if is_ingress %}<div class="alert info">目前透過 Home Assistant Ingress 自動登入。這裡的密碼只用於從外部網址直接登入 Notice Board。</div>{% endif %}
+{% set initial_ingress_password = user.auth_source == 'INGRESS' and user.hass_user_id and user.must_change_password %}
 <section class="card account-settings">
-  <h2>修改密碼</h2>
+  <h2>{{ '建立外部登入密碼' if initial_ingress_password else '修改密碼' }}</h2>
+  <p class="small muted">外部登入帳號：<strong>{{ user.username }}</strong></p>
+  {% if initial_ingress_password %}
+  <div class="alert info">此帳號由 Home Assistant 自動建立，目前沒有你知道的舊密碼。已透過 Home Assistant 驗證身分，可直接設定第一組密碼。外部首次登入時還須設定 2FA。</div>
+  {% endif %}
   <form method="post" action="{{ base_path }}/me/account/password" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if not initial_ingress_password %}
     <label>目前密碼<input type="password" name="current_password" autocomplete="current-password" required></label>
+    {% endif %}
     <label>新密碼<input type="password" name="new_password" minlength="12" autocomplete="new-password" required></label>
     <label>再輸入一次<input type="password" name="confirm" minlength="12" autocomplete="new-password" required></label>
     <button class="btn primary" type="submit">更新密碼</button>

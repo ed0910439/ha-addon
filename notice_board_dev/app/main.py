@@ -275,6 +275,24 @@ def _ingress_username(c, requested: str, hass_user_id: str) -> str:
     return f"ha-{hass_user_id[:8]}-{secrets.token_hex(2)}"[:80]
 
 
+def _bootstrap_first_ingress_admin(c, user_id: str, hass_user_id: str) -> bool:
+    """Promote only a verified HA administrator when no Notice Board admin exists.
+
+    The conditional UPDATE prevents concurrent requests from creating multiple
+    first administrators. An unavailable HA administrator directory fails closed.
+    """
+    if c.execute("SELECT 1 FROM users WHERE role='SYSADMIN' LIMIT 1").fetchone():
+        return False
+    if not ha_user_is_current_admin(hass_user_id):
+        return False
+    return bool(c.execute(
+        """UPDATE users SET role='SYSADMIN',updated_at=?
+           WHERE id=? AND hass_user_id=? AND role='USER' AND is_active=1
+           AND NOT EXISTS (SELECT 1 FROM users WHERE role='SYSADMIN')""",
+        (now_iso(), user_id, hass_user_id),
+    ).rowcount)
+
+
 def ingress_user(request: Request):
     if not is_ingress_request(request):
         return None
@@ -285,7 +303,7 @@ def ingress_user(request: Request):
         return None
 
     audit_event = None
-    user_id = None
+    promoted = False
     with conn() as c:
         existing = c.execute("SELECT * FROM users WHERE hass_user_id=?", (hass_user_id,)).fetchone()
         if existing:
@@ -293,48 +311,47 @@ def ingress_user(request: Request):
                 return None
             if existing["role"] == "SYSADMIN" and not ha_user_is_current_admin(hass_user_id):
                 return None
-            result = dict(existing)
-            result.update({"device_id": None, "device_name": "Home Assistant Ingress", "auth_source": "INGRESS"})
-            return result
-
-        match = None
-        if hass_username:
-            match = c.execute(
-                "SELECT * FROM users WHERE username=? COLLATE NOCASE AND hass_user_id IS NULL AND role='USER' AND is_active=1",
-                (hass_username,),
-            ).fetchone()
-        if match:
-            user_id = match["id"]
-            c.execute(
-                "UPDATE users SET hass_user_id=?, updated_at=? WHERE id=?",
-                (hass_user_id, now_iso(), user_id),
-            )
-            audit_event = ("auth.ingress_link", {"hass_user_id": hass_user_id, "hass_username": hass_username})
+            user_id = existing["id"]
         else:
-            user_id = str(uuid.uuid4())
-            username = _ingress_username(c, hass_username, hass_user_id)
-            t = now_iso()
-            # Ingress-provisioned accounts authenticate through Home Assistant.
-            # The unknown random password prevents accidental direct password login;
-            # a sysadmin can reset it later if external login is also desired.
-            c.execute(
-                """INSERT INTO users
-                (id,username,display_name,password_hash,role,must_change_password,hass_user_id,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?)""",
-                (user_id, username, hass_display_name[:120], hash_password(token()), "USER", 1, hass_user_id, t, t),
-            )
-            audit_event = ("auth.ingress_provision", {"hass_user_id": hass_user_id, "hass_username": hass_username})
+            match = None
+            if hass_username:
+                match = c.execute(
+                    "SELECT * FROM users WHERE username=? COLLATE NOCASE AND hass_user_id IS NULL AND role='USER' AND is_active=1",
+                    (hass_username,),
+                ).fetchone()
+            if match:
+                user_id = match["id"]
+                c.execute(
+                    "UPDATE users SET hass_user_id=?, updated_at=? WHERE id=?",
+                    (hass_user_id, now_iso(), user_id),
+                )
+                audit_event = ("auth.ingress_link", {"hass_user_id": hass_user_id, "hass_username": hass_username})
+            else:
+                user_id = str(uuid.uuid4())
+                username = _ingress_username(c, hass_username, hass_user_id)
+                t = now_iso()
+                # A new HA SSO account has no known direct-login password.
+                # It can safely set one later through trusted Ingress.
+                c.execute(
+                    """INSERT INTO users
+                    (id,username,display_name,password_hash,role,must_change_password,hass_user_id,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (user_id, username, hass_display_name[:120], hash_password(token()), "USER", 1, hass_user_id, t, t),
+                )
+                audit_event = ("auth.ingress_provision", {"hass_user_id": hass_user_id, "hass_username": hass_username})
 
-    if audit_event:
-        audit(user_id, audit_event[0], "user", user_id, audit_event[1])
-    with conn() as c:
+        promoted = _bootstrap_first_ingress_admin(c, user_id, hass_user_id)
         row = c.execute("SELECT * FROM users WHERE id=? AND is_active=1", (user_id,)).fetchone()
         if not row:
             return None
         result = dict(row)
         result.update({"device_id": None, "device_name": "Home Assistant Ingress", "auth_source": "INGRESS"})
-        return result
 
+    if audit_event:
+        audit(user_id, audit_event[0], "user", user_id, audit_event[1])
+    if promoted:
+        audit(user_id, "account.bootstrap_hass_admin", "user", user_id, {"hass_user_id": hass_user_id})
+    return result
 
 def current_user(request: Request):
     ingress = ingress_user(request)
@@ -1740,7 +1757,7 @@ def user_terms_page(request: Request):
 @app.post("/me/account/password", response_class=HTMLResponse)
 def my_password_change(
     request: Request,
-    current_password: str = Form(...),
+    current_password: str = Form(""),
     new_password: str = Form(...),
     confirm: str = Form(...),
     csrf_token: str = Form(...),
@@ -1750,13 +1767,34 @@ def my_password_change(
     if len(new_password) < 12 or new_password != confirm:
         return render(request, "account.html", error="新密碼至少 12 碼，且兩次輸入必須一致。", success=None)
     with conn() as c:
-        stored = c.execute("SELECT password_hash FROM users WHERE id=?", (user["id"],)).fetchone()
-        if not stored or not verify_password(current_password, stored["password_hash"]):
+        stored = c.execute(
+            "SELECT password_hash,must_change_password,hass_user_id FROM users WHERE id=? AND is_active=1",
+            (user["id"],),
+        ).fetchone()
+        # Only the exact HA identity, delivered by the trusted Ingress proxy,
+        # may create an initial password without the unknown random placeholder.
+        initial_ingress_password = bool(
+            stored
+            and stored["must_change_password"]
+            and stored["hass_user_id"]
+            and user.get("auth_source") == "INGRESS"
+            and is_ingress_request(request)
+            and request.headers.get("x-remote-user-id", "").strip() == stored["hass_user_id"]
+            and user.get("hass_user_id") == stored["hass_user_id"]
+        )
+        if not stored or not (initial_ingress_password or verify_password(current_password, stored["password_hash"])):
             return render(request, "account.html", error="目前密碼不正確。", success=None)
-        c.execute("UPDATE users SET password_hash=?,must_change_password=0,updated_at=? WHERE id=?", (hash_password(new_password), now_iso(), user["id"]))
-    audit(user["id"], "account.self_password_change", "user", user["id"])
-    return render(request, "account.html", error=None, success="密碼已更新。目前這台已認證裝置仍保持登入。")
-
+        c.execute(
+            "UPDATE users SET password_hash=?,must_change_password=0,updated_at=? WHERE id=?",
+            (hash_password(new_password), now_iso(), user["id"]),
+        )
+    audit(user["id"], "account.ingress_initial_password" if initial_ingress_password else "account.self_password_change", "user", user["id"])
+    success = (
+        "已設定外部登入密碼。首次從外部登入仍需完成第二階段驗證（2FA）。"
+        if initial_ingress_password else
+        "密碼已更新。目前這台已認證裝置仍保持登入。"
+    )
+    return render(request, "account.html", error=None, success=success)
 
 @app.get("/me/devices", response_class=HTMLResponse)
 def my_devices(request: Request):

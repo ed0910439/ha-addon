@@ -1,5 +1,5 @@
 name: Notice Board (DEV)
-version: "2.6.3-dev.1"
+version: "2.6.3-dev.2"
 slug: notice_board_dev
 description: "Isolated LakeJS development test app; not for production announcements."
 url: "https://github.com/ed0910439/ha-addon/tree/master/notice_board_dev"
