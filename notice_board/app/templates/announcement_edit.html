@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ '編輯公告' if announcement else '新增公告' }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lakelib@0.4.6/dist/lake.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/lakelib@0.4.6/dist/lake.min.js"></script>
+{% endblock %}
 {% block content %}
 <div class="page-head row between wrap gap">
   <div>
