@@ -216,7 +216,10 @@ const PdfAttachment = Node.create({
   },
 })
 
-const extensions = [StarterKit.configure({ link: false, underline: false }), PdfAttachment, Markdown]
+// The CDN's separately-built ProseMirror modules can allocate duplicate anonymous
+// plugin$ keys for gap/drop cursors and keymap plugins. These optional cursors
+// are disabled for the legacy editor until a single-bundle Tiptap build lands.
+const extensions = [StarterKit.configure({ link: false, underline: false, gapcursor: false, dropcursor: false }), PdfAttachment, Markdown]
 
 function readJsonScript(selector, fallback = { type: 'doc', content: [{ type: 'paragraph' }] }) {
   const el = document.querySelector(selector)
@@ -284,6 +287,8 @@ function initEditor() {
   const uploadButton = root.querySelector('[data-upload-pdf]')
   const uploadStatus = root.querySelector('[data-upload-status]')
   const dialog = document.querySelector('#pdf-display-dialog')
+  // Inline onsubmit is prohibited by the app CSP; bind events from this module.
+  dialog?.querySelector('form')?.addEventListener('submit', event => event.preventDefault())
   const initialContent = readJsonScript('#editor-initial-content')
   const markdownToggle = root.querySelector('[data-markdown-toggle]')
   const markdownPanel = root.querySelector('[data-markdown-panel]')
