@@ -1,7 +1,7 @@
-import { Editor, Node } from 'https://cdn.jsdelivr.net/npm/@tiptap/core@3.31.3/+esm'
-import StarterKit from 'https://cdn.jsdelivr.net/npm/@tiptap/starter-kit@3.31.3/+esm'
+import { Editor, Node } from '@tiptap/core'
+import StarterKit from '@tiptap/starter-kit'
 import { initializeLakeEditor } from './lake_editor.js'
-import { Markdown } from 'https://cdn.jsdelivr.net/npm/@tiptap/markdown@3.31.3/+esm'
+import { Markdown } from '@tiptap/markdown'
 
 const bytesLabel = (bytes) => {
   const value = Number(bytes || 0)
@@ -216,9 +216,8 @@ const PdfAttachment = Node.create({
   },
 })
 
-// The CDN's separately-built ProseMirror modules can allocate duplicate anonymous
-// plugin$ keys for gap/drop cursors and keymap plugins. These optional cursors
-// are disabled for the legacy editor until a single-bundle Tiptap build lands.
+// Use one esbuild output so all Tiptap and ProseMirror dependencies share a
+// single module instance. Optional cursors remain off for the legacy bridge.
 const extensions = [StarterKit.configure({ link: false, underline: false, gapcursor: false, dropcursor: false }), PdfAttachment, Markdown]
 
 function readJsonScript(selector, fallback = { type: 'doc', content: [{ type: 'paragraph' }] }) {

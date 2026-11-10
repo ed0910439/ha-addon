@@ -10,13 +10,13 @@ import { chromium } from 'playwright-core'
 const chrome = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser']
   .find(p => fs.existsSync(p))
 assert.ok(chrome, 'Chrome required for editor integration test')
-const editorJS = fs.readFileSync(new URL('../app/static/editor.js', import.meta.url), 'utf8')
+const editorJS = fs.readFileSync(new URL('../app/static/editor.bundle.js', import.meta.url), 'utf8')
 const bridgeJS = fs.readFileSync(new URL('../app/static/lake_editor.js', import.meta.url), 'utf8')
 const adapterJS = fs.readFileSync(new URL('../app/static/lake_adapter.js', import.meta.url), 'utf8')
+assert.ok(editorJS.length > 100000, 'Production Tiptap bundle was not generated')
+assert.ok(!editorJS.includes('https://cdn.jsdelivr.net/npm/@tiptap/core@3.31.3/+esm'), 'Old Tiptap CDN import is still present')
 const contents = new Map([
-  ['/static/editor.js', editorJS],
-  ['/static/lake_editor.js', bridgeJS],
-  ['/static/lake_adapter.js', adapterJS],
+  ['/static/editor.bundle.js', editorJS],
 ])
 const pdfDoc = {type:'doc',content:[
   {type:'paragraph',content:[{type:'text',text:'Existing PDF stays intact'}]},
@@ -42,7 +42,7 @@ const html = doc => `<!doctype html><html lang="zh-Hant"><head>
 </div><button type="submit">Save</button></form>
 <dialog id="pdf-display-dialog"><form method="dialog"><button type="button" data-pdf-mode="attachment">Attach</button></form></dialog>
 <script type="application/json" id="editor-initial-content">${JSON.stringify(doc)}</script>
-<script type="module" src="/static/editor.js"></script>
+<script type="module" src="/static/editor.bundle.js"></script>
 </body></html>`
 const csp = "default-src 'self'; img-src 'self' data: https:; style-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net; frame-src 'self'; object-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 const server = http.createServer((req,res) => {

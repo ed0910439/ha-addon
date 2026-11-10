@@ -35,6 +35,7 @@ jobs:
         working-directory: notice_board_dev
         run: |
           npm install --no-save --no-package-lock linkedom@0.18.12 playwright-core@1.56.1
+          npm run build:editor
           node --input-type=module --check < app/static/editor.js
           node --input-type=module --check < app/static/lake_adapter.js
           node --input-type=module --check < app/static/lake_editor.js

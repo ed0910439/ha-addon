@@ -1,0 +1,17 @@
+{
+  "name": "notice-board-dev-editor",
+  "private": true,
+  "version": "2.6.3-dev.4",
+  "type": "module",
+  "scripts": {
+    "build:editor": "esbuild app/static/editor.js --bundle --format=esm --platform=browser --target=es2022 --outfile=app/static/editor.bundle.js"
+  },
+  "dependencies": {
+    "@tiptap/core": "3.31.3",
+    "@tiptap/starter-kit": "3.31.3",
+    "@tiptap/markdown": "3.31.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

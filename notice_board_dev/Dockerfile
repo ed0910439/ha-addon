@@ -1,3 +1,11 @@
+FROM node:22-alpine AS editor-build
+
+WORKDIR /build
+COPY package.json ./
+RUN npm install --no-audit --no-fund
+COPY app/static/ ./app/static/
+RUN npm run build:editor
+
 FROM ghcr.io/home-assistant/base:3.24
 
 ARG BUILD_VERSION=dev
@@ -41,6 +49,7 @@ RUN apk add --no-cache \
     && apk del .build-deps
 
 COPY app ./app
+COPY --from=editor-build /build/app/static/editor.bundle.js ./app/static/editor.bundle.js
 COPY notification_gateway ./notification_gateway
 COPY ha_addon/rootfs /
 
